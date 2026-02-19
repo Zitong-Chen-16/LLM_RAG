@@ -1,0 +1,437 @@
+version: 1
+user_agent: Mozilla/5.0 (compatible; ANLP-RAG-Scraper/1.0; +https://cmu.edu)
+out_dir: data/raw
+manifest_path: data/raw/manifest.jsonl
+global_deny_patterns:
+- /search
+- /login
+- /signin
+- /signup
+- /account
+- /cart
+- /checkout
+- /wp-admin
+- \.jpg$|\.jpeg$|\.png$|\.gif$|\.webp$|\.svg$
+- \.mp4$|\.mov$|\.avi$|\.mp3$|\.wav$
+- \.css$|\.js$|\.map$
+domains:
+- domain: en.wikipedia.org
+  seeds:
+  - https://en.wikipedia.org/wiki/Pittsburgh
+  - https://en.wikipedia.org/wiki/History_of_Pittsburgh
+  out_subdir: wikipedia
+  max_pages: 200
+  max_depth: 1
+  delay_s: 1.0
+  allowed_schemes: &id001
+  - http
+  - https
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://en\.wikipedia\.org/wiki/(Pittsburgh|History_of_Pittsburgh)
+  - ^https?://en\.wikipedia\.org/wiki/(Carnegie_Museum|Carnegie_Museums|Heinz_History_Center|Pittsburgh_Symphony|Pittsburgh_Penguins|Pittsburgh_Steelers|Pittsburgh_Pirates)
+  deny_patterns:
+  - ':'
+  - '#'
+- domain: www.britannica.com
+  seeds:
+  - https://www.britannica.com/place/Pittsburgh
+  out_subdir: britannica
+  max_pages: 60
+  max_depth: 1
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.britannica\.com/place/Pittsburgh
+  deny_patterns:
+  - '#'
+- domain: www.cmu.edu
+  seeds:
+  - https://www.cmu.edu/about/
+  out_subdir: cmu
+  max_pages: 300
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.cmu\.edu/about
+  - ^https?://www\.cmu\.edu/about/history
+  - ^https?://www\.cmu\.edu/about/.*(facts|leadership|campus|rankings|mission|values)
+  - ^https?://www\.cmu\.edu/engage/alumni/events/campus
+  deny_patterns:
+  - '#'
+- domain: www.visitpittsburgh.com
+  seeds:
+  - https://www.visitpittsburgh.com/
+  - https://www.visitpittsburgh.com/things-to-do/pittsburgh-sports-teams/
+  - https://www.visitpittsburgh.com/events-festivals/food-festivals/
+  out_subdir: visitpittsburgh
+  max_pages: 2000
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.visitpittsburgh\.com/(things-to-do|events-festivals|food|restaurants|sports|music|arts-culture|history|plan-your-trip|neighborhoods)
+  - ^https?://www\.visitpittsburgh\.com/events-festivals/
+  - ^https?://www\.visitpittsburgh\.com/things-to-do/
+  deny_patterns:
+  - \?.*(utm_|fbclid|gclid)=
+  - '#'
+- domain: www.pittsburghpa.gov
+  seeds:
+  - https://www.pittsburghpa.gov/Home
+  - https://pittsburghpa.gov/finance/tax-forms
+  - https://www.pittsburghpa.gov/files/assets/city/v/4/omb/documents/operating-budgets/2025-operating-budget.pdf
+  out_subdir: pittsburghpa
+  max_pages: 800
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://(www\.)?pittsburghpa\.gov/(Home|finance|files|Government|Residents|Business|.*operating-budgets)
+  - ^https?://(www\.)?pittsburghpa\.gov/finance/tax-forms
+  - \.pdf$
+  deny_patterns:
+  - '#'
+  - \?.*(utm_|fbclid|gclid)=
+- domain: pittsburgh.events
+  seeds:
+  - https://pittsburgh.events/
+  - https://pittsburgh.events/march/
+  - https://pittsburgh.events/april/
+  - https://pittsburgh.events/may/
+  - https://pittsburgh.events/june/
+  - https://pittsburgh.events/july/
+  - https://pittsburgh.events/august/
+  - https://pittsburgh.events/september/
+  - https://pittsburgh.events/october/
+  - https://pittsburgh.events/november/
+  - https://pittsburgh.events/december/
+  out_subdir: pittsburgh_events
+  max_pages: 2000
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://pittsburgh\.events/
+  - ^https?://pittsburgh\.events/(events|event|calendar|month|search|.*\d{4}.*\d{2})
+  deny_patterns:
+  - '#'
+  - \?.*(utm_|fbclid|gclid)=
+  - (page=|p=)\d{3,}
+- domain: downtownpittsburgh.com
+  seeds:
+  - https://downtownpittsburgh.com/events/
+  out_subdir: downtownpgh_events
+  max_pages: 600
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://downtownpittsburgh\.com/events
+  - ^https?://downtownpittsburgh\.com/.*(event|events)/
+  deny_patterns:
+  - '#'
+- domain: www.pghcitypaper.com
+  seeds:
+  - https://www.pghcitypaper.com/pittsburgh/EventSearch?v=d
+  out_subdir: pghcitypaper_events
+  max_pages: 1200
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: false
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.pghcitypaper\.com/pittsburgh/EventSearch
+  - ^https?://www\.pghcitypaper\.com/pittsburgh/.*(EventSearch|event|events|Event)
+  deny_patterns:
+  - '#'
+- domain: events.cmu.edu
+  seeds:
+  - https://events.cmu.edu/
+  out_subdir: cmu_events
+  max_pages: 1200
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://events\.cmu\.edu/
+  - ^https?://events\.cmu\.edu/.*(event|events|calendar|search)
+  deny_patterns:
+  - '#'
+- domain: www.cmu.edu/engage/events
+  seeds:
+  - https://www.cmu.edu/engage/events
+  out_subdir: cmu_events
+  max_pages: 1200
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.cmu\.edu/engage/events
+  - ^https?://www\.cmu\.edu/engage/events/.*
+  deny_patterns:
+  - '#'
+- domain: www.pittsburghsymphony.org
+  seeds:
+  - https://www.pittsburghsymphony.org/
+  out_subdir: pso
+  max_pages: 800
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.pittsburghsymphony\.org/
+  - ^https?://www\.pittsburghsymphony\.org/.*(concerts|events|tickets|season|calendar|about|education)
+  deny_patterns:
+  - '#'
+- domain: pittsburghopera.org
+  seeds:
+  - https://pittsburghopera.org/
+  out_subdir: opera
+  max_pages: 600
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://pittsburghopera\.org/
+  - ^https?://pittsburghopera\.org/.*(performances|events|calendar|about|education|season)
+  deny_patterns:
+  - '#'
+- domain: trustarts.org
+  seeds:
+  - https://trustarts.org/
+  out_subdir: trustarts
+  max_pages: 1200
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://trustarts\.org/
+  - ^https?://trustarts\.org/.*(events|calendar|show|performance|theater|about)
+  deny_patterns:
+  - '#'
+- domain: carnegiemuseums.org
+  seeds:
+  - https://carnegiemuseums.org/
+  out_subdir: carnegie_museums
+  max_pages: 800
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://carnegiemuseums\.org/
+  - ^https?://carnegiemuseums\.org/.*(visit|exhibitions|events|about|museum|plan)
+  deny_patterns:
+  - '#'
+- domain: www.heinzhistorycenter.org
+  seeds:
+  - https://www.heinzhistorycenter.org/
+  out_subdir: heinz_history
+  max_pages: 600
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.heinzhistorycenter\.org/
+  - ^https?://www\.heinzhistorycenter\.org/.*(visit|events|exhibits|about|education|calendar)
+  deny_patterns:
+  - '#'
+- domain: www.thefrickpittsburgh.org
+  seeds:
+  - https://www.thefrickpittsburgh.org/
+  out_subdir: frick
+  max_pages: 600
+  max_depth: 2
+  delay_s: 1.2
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.thefrickpittsburgh\.org/
+  - ^https?://www\.thefrickpittsburgh\.org/.*(visit|events|exhibitions|about|education)
+  deny_patterns:
+  - '#'
+- domain: www.picklesburgh.com
+  seeds:
+  - https://www.picklesburgh.com/
+  out_subdir: picklesburgh
+  max_pages: 300
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.picklesburgh\.com/
+  - ^https?://www\.picklesburgh\.com/.*(about|festival|schedule|vendors|faq|music|map)
+  deny_patterns:
+  - '#'
+- domain: www.pghtacofest.com
+  seeds:
+  - https://www.pghtacofest.com/
+  out_subdir: tacofest
+  max_pages: 300
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.pghtacofest\.com/
+  - ^https?://www\.pghtacofest\.com/.*(about|festival|schedule|vendors|faq|music|map)
+  deny_patterns:
+  - '#'
+- domain: pittsburghrestaurantweek.com
+  seeds:
+  - https://pittsburghrestaurantweek.com/
+  out_subdir: restaurant_week
+  max_pages: 500
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://pittsburghrestaurantweek\.com/
+  - ^https?://pittsburghrestaurantweek\.com/.*(participating|restaurants|events|about|faq|schedule)
+  deny_patterns:
+  - '#'
+- domain: littleitalydays.com
+  seeds:
+  - https://littleitalydays.com/
+  out_subdir: little_italy_days
+  max_pages: 300
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://littleitalydays\.com/
+  - ^https?://littleitalydays\.com/.*(festival|schedule|vendors|about|faq|music|map)
+  deny_patterns:
+  - '#'
+- domain: bananasplitfest.com
+  seeds:
+  - https://bananasplitfest.com/
+  out_subdir: banana_split_fest
+  max_pages: 300
+  max_depth: 2
+  delay_s: 1.0
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://bananasplitfest\.com/
+  - ^https?://bananasplitfest\.com/.*(festival|schedule|vendors|about|faq|music|map)
+  deny_patterns:
+  - '#'
+- domain: www.mlb.com
+  seeds:
+  - https://www.mlb.com/pirates
+  out_subdir: pirates
+  max_pages: 120
+  max_depth: 1
+  delay_s: 1.5
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.mlb\.com/pirates
+  - ^https?://www\.mlb\.com/pirates/(ballpark|history|team|fans|schedule)
+  deny_patterns:
+  - /news
+  - /video
+  - /scores
+  - /stats
+  - '#'
+- domain: www.steelers.com
+  seeds:
+  - https://www.steelers.com/
+  out_subdir: steelers
+  max_pages: 200
+  max_depth: 1
+  delay_s: 1.5
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.steelers\.com/
+  - ^https?://www\.steelers\.com/(team|history|stadium|tickets|schedule)
+  deny_patterns:
+  - /news
+  - /video
+  - /photos
+  - /podcasts
+  - '#'
+- domain: www.nhl.com
+  seeds:
+  - https://www.nhl.com/penguins
+  out_subdir: penguins
+  max_pages: 200
+  max_depth: 1
+  delay_s: 1.5
+  allowed_schemes: *id001
+  same_domain_only: true
+  strip_query: true
+  keep_query_params: []
+  allow_patterns:
+  - ^https?://www\.nhl\.com/penguins
+  - ^https?://www\.nhl\.com/penguins/(team|history|arena|schedule|tickets)
+  deny_patterns:
+  - /news
+  - /video
+  - /multimedia
+  - '#'
