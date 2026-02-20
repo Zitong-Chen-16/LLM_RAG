@@ -147,7 +147,6 @@ def crawl_domain(cfg: CrawlConfig):
 
 if __name__ == "__main__":
 
-
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--config",

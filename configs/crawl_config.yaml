@@ -33,21 +33,22 @@ domains:
   - ^https?://en\.wikipedia\.org/wiki/(Pittsburgh|History_of_Pittsburgh)
   - ^https?://en\.wikipedia\.org/wiki/(Carnegie_Museum|Carnegie_Museums|Heinz_History_Center|Pittsburgh_Symphony|Pittsburgh_Penguins|Pittsburgh_Steelers|Pittsburgh_Pirates)
   deny_patterns:
-  - ':'
   - '#'
+  - '^https?://en\.wikipedia\.org/wiki/(Special|File|Category|Talk|Help|Template|Portal|Wikipedia):'
+  - 'action=edit'
 - domain: www.britannica.com
   seeds:
   - https://www.britannica.com/place/Pittsburgh
   out_subdir: britannica
-  max_pages: 60
-  max_depth: 1
-  delay_s: 1.2
+  max_pages: 10
+  max_depth: 3
+  delay_s: 2
   allowed_schemes: *id001
   same_domain_only: true
   strip_query: true
   keep_query_params: []
   allow_patterns:
-  - ^https?://www\.britannica\.com/place/Pittsburgh
+  - '^https?://www\.britannica\.com/place/Pittsburgh$'
   deny_patterns:
   - '#'
 - domain: www.cmu.edu
