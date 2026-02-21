@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from typing import List
+import re
 
 def load_chunk_text_map(chunks_path: Path):
     m = {}

@@ -69,15 +69,8 @@ if __name__ == "__main__":
     r = SparseRetriever(index_dir=Path("indexes/bm25"))
     r.load()
 
-    query = "When was the Pittsburgh Soul Food Festival established?"
-    results = r.retrieve(query, k=2)
-    results = sorted(results, key=lambda x: x[1], reverse=True)
-    top_chunk_id, top_score = results[0]
-    top = chunk_map[top_chunk_id]
-
-    print(f"Query: {query}")
-    print(f"Top chunk: {top_chunk_id}  score={top_score:.4f}")
-    print(f"Title: {top.get('title','')}")
-    print(f"Section: {top.get('section_heading')}")
-    print("-" * 80)
-    print(top["text"])
+    q = "When was the Pittsburgh Soul Food Festival established?"
+    res = r.retrieve(q, k=5)
+    cid, sc = res[0]
+    print("\nQUERY:", q)
+    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('title','')}")
