@@ -3,10 +3,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse, urldefrag
 import os
-
 import requests
-from bs4 import BeautifulSoup
 import argparse
+
+from bs4 import BeautifulSoup
 import yaml
 
 
