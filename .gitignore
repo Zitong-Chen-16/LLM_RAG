@@ -1,0 +1,78 @@
+# .gitnore - Git ignore rules for a Python library
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+wheelhouse/
+
+# Installer logs
+pip-log.txt
+
+# Test / coverage
+.pytest_cache/
+.cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Type check / Cython
+.mypy_cache/
+cython_debug/
+
+# Sphinx documentation
+docs/_build/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDEs and editors
+.idea/
+.vscode/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*~
+.project
+.metadata
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Jupyter
+.ipynb_checkpoints
+
+# Misc
+local_settings.py
+.env
+.env.local
+.env.*.local
+
+# CI / build artifacts
+.tox/
+.nox/
+*.egg
+
+# Data
+indexes/
+data/
