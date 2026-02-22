@@ -165,7 +165,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw_dir", default="data/raw", help="Crawled raw directory")
     ap.add_argument("--manifest", default="data/raw/manifest.jsonl", help="Manifest JSONL path (optional)")
-    ap.add_argument("--baseline_dir", default=None,
+    ap.add_argument("--baseline_dir", default="data/raw/baseline_data",
                     help="Baseline folder containing flat *.htm/*.html files (no manifest).")
     ap.add_argument("--out", default="data/processed/docs.jsonl", help="Output docs JSONL")
     ap.add_argument("--max_pdf_pages", type=int, default=0, help="If >0, limit PDF extraction to first N pages")
