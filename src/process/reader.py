@@ -203,10 +203,10 @@ if __name__ == "__main__":
     reader = QwenReader(ReaderConfig(
         model_name="Qwen/Qwen2.5-14B-Instruct",
         load_in_4bit=True,
-        max_context_tokens=6000,
+        max_context_tokens=5000,
         max_new_tokens=64,
-        temperature=0.2,
-        top_p=0.9,
+        temperature=0,
+        top_p=1,
     ))
     reader.load()
 
@@ -221,7 +221,7 @@ if __name__ == "__main__":
 
     for q in queries:
         retrieved = retriever.retrieve(q, k=10)
-        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map][:8]  # k_ctx=8
+        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map][:6]  # k_ctx=6
 
         ans, used = reader.answer(q, ctx)
         print("\nQ:", q)
