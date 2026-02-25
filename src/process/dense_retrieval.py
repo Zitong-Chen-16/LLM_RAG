@@ -133,7 +133,7 @@ if __name__ == "__main__":
             chunks_path=Path("data/processed/chunks.jsonl"),
             model_name="sentence-transformers/all-MiniLM-L6-v2",
             device="cuda:1",
-            batch_size=256,
+            batch_size=2,
             normalize=True,
         )
         r.build(save_embeddings=False)
@@ -143,11 +143,17 @@ if __name__ == "__main__":
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
 
-    r = DenseRetriever(index_dir=Path("indexes/dense"), chunks_path=chunks_path, device="cuda")
+    r = DenseRetriever(index_dir=Path("indexes/dense"), 
+                       chunks_path=chunks_path, 
+                       model_name="sentence-transformers/all-MiniLM-L6-v2",
+                       device="cuda:1")
     r.load()
 
-    q = "When was the Pittsburgh Soul Food Festival established?"
+    
+    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
+
     res = r.retrieve(q, k=5)
+
     cid, sc = res[0]
     print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('title','')}")        
+    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")        

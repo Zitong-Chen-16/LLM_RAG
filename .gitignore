@@ -76,3 +76,4 @@ local_settings.py
 # Data
 indexes/
 data/
+tmp/

@@ -96,11 +96,10 @@ class QwenReader:
 
         system = (
             "You are a question answering system.\n"
-            "Answer the question based on both your knowledge and the provided context.\n"
+            "Answer the question based on the provided context.\n"
             "Output ONLY the answer (no explanations).\n"
             "Keep your answer concise.\n"
             "Answer in English ONLY.\n"
-            "No need to explain whether the answer is in context or not."
         )
         user = f"Context:\n{ctx_blocks}\n\nQuestion: {question}\nAnswer:"
 
@@ -211,10 +210,12 @@ if __name__ == "__main__":
     reader.load()
 
     queries = [
-        "When was Carnegie Mellon founded?",
-        "Where is Picklesburgh held?",
-        "What is the 2025 operating budget for Pittsburgh?",
-        "Where does the Pittsburgh Symphony perform?",
+        "What is the name of Carnegie Mellon's student newspaper?",
+        "What are the official colors of Carnegie Mellon University?",
+        "Which Pittsburgh restaurant is famous for its cheesesteaks?",
+        "What is the specialty of Tessaro’s in Pittsburgh?",
+        "Which Pittsburgh bakery is known for its macarons?",
+        "What is the specialty of Fet Fisk in Pittsburgh?",
     ]
 
     for q in queries:

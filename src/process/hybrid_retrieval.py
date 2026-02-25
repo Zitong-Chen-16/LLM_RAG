@@ -66,7 +66,8 @@ def build_default_hybrid(
     sparse = SparseRetriever(index_dir=bm25_dir, chunks_path=chunks_path)
     sparse.load()
 
-    dense = DenseRetriever(index_dir=dense_dir, chunks_path=chunks_path, device=device)
+    dense = DenseRetriever(index_dir=dense_dir, chunks_path=chunks_path, device=device,
+                            model_name="sentence-transformers/all-MiniLM-L6-v2")
     dense.load()
 
     return HybridRetriever(
@@ -93,8 +94,8 @@ if __name__ == "__main__":
         device="cuda:1",
     )
 
-    q = "When was the Pittsburgh Soul Food Festival established?"
+    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
     res = r.retrieve(q, k=5)
     cid, sc = res[0]
     print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('title','')}")
+    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")

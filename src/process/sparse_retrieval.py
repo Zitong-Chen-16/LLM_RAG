@@ -69,8 +69,8 @@ if __name__ == "__main__":
     r = SparseRetriever(index_dir=Path("indexes/bm25"))
     r.load()
 
-    q = "When was the Pittsburgh Soul Food Festival established?"
+    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
     res = r.retrieve(q, k=5)
     cid, sc = res[0]
     print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('title','')}")
+    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")

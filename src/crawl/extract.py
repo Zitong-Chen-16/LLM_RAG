@@ -15,9 +15,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple, Iterator
 
-from bs4 import BeautifulSoup  # pip install beautifulsoup4
-import pdfplumber              # pip install pdfplumber
+from bs4 import BeautifulSoup  
+import pdfplumber              
 
+from clean_txt import clean_extracted_text, sanitize_links_in_dom
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -86,6 +87,8 @@ def extract_text_from_html(html_bytes: bytes) -> Tuple[str, str]:
         for tag in soup.select(selector):
             tag.decompose()
 
+    sanitize_links_in_dom(soup)
+    
     # Title
     title = ""
     if soup.title and soup.title.string:
@@ -206,6 +209,14 @@ def main() -> None:
                 title = ""
                 text = extract_text_from_pdf(path, max_pages=max_pdf_pages)
 
+            text = clean_extracted_text(
+                text,
+                domain=domain,
+                drop_after_stop_section=False,
+                remove_citations=True,
+                remove_urls=False,
+            )
+
             if len(text) < args.min_chars:
                 n_skipped_short += 1
                 continue
@@ -245,6 +256,13 @@ def main() -> None:
 
             try:
                 title, text = extract_text_from_html(path.read_bytes())
+                text = clean_extracted_text(
+                    text,
+                    domain=domain,
+                    drop_after_stop_section=False,
+                    remove_citations=True,
+                    remove_urls=False,
+                )
                 if not title:
                     title = path.stem
 
