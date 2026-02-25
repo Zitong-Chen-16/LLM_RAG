@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
@@ -9,6 +8,21 @@ from typing import List, Tuple
 import bm25s
 
 from utils import load_chunk_text_map, iter_jsonl, tokenize
+
+def build_sparse_tokens(chunk: dict, *, title_weight: int = 3, heading_weight: int = 2) -> List[str]:
+    """
+    Build BM25 tokens with simple field weighting:
+    title > section heading > body text.
+    """
+    title = str(chunk.get("title", "") or "")
+    heading = str(chunk.get("section_heading", "") or "")
+    text = str(chunk.get("text", "") or "")
+
+    title_tokens = tokenize(title)
+    heading_tokens = tokenize(heading)
+    text_tokens = tokenize(text)
+
+    return (title_tokens * max(1, title_weight)) + (heading_tokens * max(1, heading_weight)) + text_tokens
 
 @dataclass
 class SparseRetriever:
@@ -23,7 +37,7 @@ class SparseRetriever:
     def build(self) -> None:
         chunks = list(iter_jsonl(self.chunks_path))
         self._chunk_ids = [c["chunk_id"] for c in chunks]
-        corpus_tokens = [tokenize(c["text"]) for c in chunks]
+        corpus_tokens = [build_sparse_tokens(c) for c in chunks]
 
         self._bm25 = bm25s.BM25()
         self._bm25.index(corpus_tokens)

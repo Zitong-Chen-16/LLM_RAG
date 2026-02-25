@@ -258,7 +258,7 @@ def main() -> None:
                 title, text = extract_text_from_html(path.read_bytes())
                 text = clean_extracted_text(
                     text,
-                    domain=domain,
+                    domain=inferred_domain,
                     drop_after_stop_section=False,
                     remove_citations=True,
                     remove_urls=False,

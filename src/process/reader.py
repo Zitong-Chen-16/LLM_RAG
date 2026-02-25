@@ -2,6 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional, Tuple
 from pathlib import Path
+import re
 
 import torch
 from transformers import (
@@ -15,17 +16,45 @@ from utils import load_chunk_text_map
 
 def _clean_answer(s: str) -> str:
     s = (s or "").strip()
-    # remove prefixes
-    for p in ["Answer:", "answer:", "A:", "Final:", "final:"]:
+    prefixes = ["Answer:", "answer:", "A:", "Final:", "final:"]
+
+    for p in prefixes:
         if s.startswith(p):
             s = s[len(p):].strip()
-    # keep first non-empty line
-    lines = [ln.strip() for ln in s.splitlines() if ln.strip()]
-    if lines:
-        s = lines[0]
-    # strip surrounding quotes
-    s = s.strip().strip('"').strip("'").strip()
-    return s
+
+    lines: List[str] = []
+    for raw in s.splitlines():
+        ln = raw.strip()
+        if not ln:
+            continue
+        # Normalize common list formats so multi-answer outputs are preserved.
+        ln = re.sub(r"^[-*•]\s*", "", ln)
+        ln = re.sub(r"^\d+[\.\)]\s*", "", ln)
+        for p in prefixes:
+            if ln.startswith(p):
+                ln = ln[len(p):].strip()
+        ln = ln.strip().strip('"').strip("'").strip()
+        if ln:
+            lines.append(ln)
+
+    if not lines:
+        return ""
+
+    if len(lines) > 1 and lines[0].rstrip(":").lower() in {"answer", "answers"}:
+        lines = lines[1:]
+
+    deduped: List[str] = []
+    seen = set()
+    for ln in lines:
+        key = ln.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(ln)
+    lines = deduped or lines
+
+    s = lines[0] if len(lines) == 1 else "; ".join(lines)
+    return s.strip().strip('"').strip("'").strip()
 
 
 def _format_context_chunk(i: int, c: Dict[str, Any]) -> str:
