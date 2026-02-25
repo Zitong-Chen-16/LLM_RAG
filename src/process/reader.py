@@ -53,10 +53,10 @@ class ReaderConfig:
     model_name: str = "Qwen/Qwen2.5-14B-Instruct"
     device_map: str = "auto"
     load_in_4bit: bool = True
-    max_context_tokens: int = 6000   # context budge
+    max_context_tokens: int = 4000   # context budget
     max_new_tokens: int = 64
-    temperature: float = 0.2
-    top_p: float = 0.9
+    temperature: float = 0.0
+    top_p: float = 1.0
     repetition_penalty: float = 1.05
 
 

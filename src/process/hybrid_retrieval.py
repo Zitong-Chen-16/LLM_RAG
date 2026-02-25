@@ -29,6 +29,8 @@ class HybridRetriever:
     w_sparse: float = 0.4
     k_dense: int = 100
     k_sparse: int = 100
+    fusion_method: str = "rrf"
+    rrf_k: int = 60
 
     def retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
         dense_res = self.dense.retrieve(query, k=self.k_dense)   # [(chunk_id, score)]
@@ -36,17 +38,26 @@ class HybridRetriever:
 
         dense_scores = {cid: sc for cid, sc in dense_res}
         sparse_scores = {cid: sc for cid, sc in sparse_res}
-
-        dense_norm = minmax_norm(dense_scores)
-        sparse_norm = minmax_norm(sparse_scores)
         cands = set(dense_scores) | set(sparse_scores)
 
         fused = []
-        for cid in cands:
-            sd = dense_norm.get(cid, 0.0)
-            ss = sparse_norm.get(cid, 0.0)
-            fused_score = self.w_dense * sd + self.w_sparse * ss
-            fused.append((cid, float(fused_score)))
+        if self.fusion_method.lower() == "rrf":
+            dense_rank = {cid: i + 1 for i, (cid, _sc) in enumerate(dense_res)}
+            sparse_rank = {cid: i + 1 for i, (cid, _sc) in enumerate(sparse_res)}
+            for cid in cands:
+                rd = dense_rank.get(cid)
+                rs = sparse_rank.get(cid)
+                sd = (self.w_dense / (self.rrf_k + rd)) if rd is not None else 0.0
+                ss = (self.w_sparse / (self.rrf_k + rs)) if rs is not None else 0.0
+                fused.append((cid, float(sd + ss)))
+        else:
+            dense_norm = minmax_norm(dense_scores)
+            sparse_norm = minmax_norm(sparse_scores)
+            for cid in cands:
+                sd = dense_norm.get(cid, 0.0)
+                ss = sparse_norm.get(cid, 0.0)
+                fused_score = self.w_dense * sd + self.w_sparse * ss
+                fused.append((cid, float(fused_score)))
 
         fused.sort(key=lambda x: (x[1], x[0]), reverse=True)
         return fused[:k]
@@ -62,7 +73,9 @@ def build_default_hybrid(
     k_dense: int = 100,
     k_sparse: int = 100,
     device: str = "cuda",
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
+    model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+    fusion_method: str = "rrf",
+    rrf_k: int = 60,
 ) -> HybridRetriever:
     sparse = SparseRetriever(index_dir=bm25_dir, chunks_path=chunks_path)
     sparse.load()
@@ -80,6 +93,8 @@ def build_default_hybrid(
         w_sparse=w_sparse,
         k_dense=k_dense,
         k_sparse=k_sparse,
+        fusion_method=fusion_method,
+        rrf_k=rrf_k,
     )
 
 if __name__ == "__main__":
