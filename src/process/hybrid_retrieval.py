@@ -62,12 +62,15 @@ def build_default_hybrid(
     k_dense: int = 100,
     k_sparse: int = 100,
     device: str = "cuda",
+    model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
 ) -> HybridRetriever:
     sparse = SparseRetriever(index_dir=bm25_dir, chunks_path=chunks_path)
     sparse.load()
 
-    dense = DenseRetriever(index_dir=dense_dir, chunks_path=chunks_path, device=device,
-                            model_name="sentence-transformers/all-MiniLM-L6-v2")
+    dense = DenseRetriever(index_dir=dense_dir, 
+                           chunks_path=chunks_path, 
+                           device=device,
+                            model_name=model_name)
     dense.load()
 
     return HybridRetriever(

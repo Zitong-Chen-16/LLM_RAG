@@ -196,6 +196,7 @@ if __name__ == "__main__":
         k_dense=100,
         k_sparse=100,
         device="cuda",
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct"
     )
 
     # Reader
