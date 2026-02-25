@@ -145,7 +145,7 @@ if __name__ == "__main__":
             chunks_path=Path("data/processed/chunks.jsonl"),
             model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             device="cuda:1",
-            batch_size=2,
+            batch_size=16,
             normalize=True,
         )
         r.build(save_embeddings=False)

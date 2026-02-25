@@ -102,7 +102,7 @@ def main():
     ap.add_argument("--dense_dir", default="indexes/dense")
 
     ap.add_argument("--k_retrieve", type=int, default=50, help="Initial candidate count from hybrid retriever")
-    ap.add_argument("--k_ctx", type=int, default=5, help="How many chunks to pass to reader")
+    ap.add_argument("--k_ctx", type=int, default=10, help="How many chunks to pass to reader")
     ap.add_argument("--stage1_k", type=int, default=20, help="Top candidates considered by MMR reranker")
     ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
     ap.add_argument("--dedup_doc", action="store_true", help="Deduplicate context chunks by doc_id")
@@ -116,7 +116,7 @@ def main():
     ap.add_argument("--embed_model", default="Alibaba-NLP/gte-Qwen2-1.5B-instruct")
 
     ap.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct")
-    ap.add_argument("--max_context_tokens", type=int, default=4000)
+    ap.add_argument("--max_context_tokens", type=int, default=12000)
     ap.add_argument("--max_new_tokens", type=int, default=64)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--top_p", type=float, default=1.0)

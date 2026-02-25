@@ -50,7 +50,7 @@ class HybridRetriever:
                 sd = (self.w_dense / (self.rrf_k + rd)) if rd is not None else 0.0
                 ss = (self.w_sparse / (self.rrf_k + rs)) if rs is not None else 0.0
                 fused.append((cid, float(sd + ss)))
-        else:
+        elif self.fusion_method.lower() == 'minmax':
             dense_norm = minmax_norm(dense_scores)
             sparse_norm = minmax_norm(sparse_scores)
             for cid in cands:
@@ -58,7 +58,8 @@ class HybridRetriever:
                 ss = sparse_norm.get(cid, 0.0)
                 fused_score = self.w_dense * sd + self.w_sparse * ss
                 fused.append((cid, float(fused_score)))
-
+        else:
+            raise ValueError(f"Unsupported fusion method: {self.fusion_method}")
         fused.sort(key=lambda x: (x[1], x[0]), reverse=True)
         return fused[:k]
 
