@@ -116,6 +116,7 @@ def main():
     ap.add_argument("--embed_model", default="Alibaba-NLP/gte-Qwen2-1.5B-instruct")
 
     ap.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct")
+    ap.add_argument("--quant_backend", choices=["auto", "bnb", "gptq", "none"], default="auto")
     ap.add_argument("--max_context_tokens", type=int, default=12000)
     ap.add_argument("--max_new_tokens", type=int, default=64)
     ap.add_argument("--temperature", type=float, default=0.0)
@@ -150,7 +151,7 @@ def main():
 
     reader = QwenReader(ReaderConfig(
         model_name=args.model,
-        load_in_4bit=True,
+        quant_backend=args.quant_backend,
         max_context_tokens=args.max_context_tokens,
         max_new_tokens=args.max_new_tokens,
         temperature=args.temperature,

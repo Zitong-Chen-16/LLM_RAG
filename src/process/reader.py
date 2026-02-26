@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from pathlib import Path
 import re
 
@@ -80,8 +80,9 @@ def _format_context_chunk(i: int, c: Dict[str, Any]) -> str:
 @dataclass
 class ReaderConfig:
     model_name: str = "Qwen/Qwen2.5-14B-Instruct"
-    device_map: str = "cuda:0"
-    load_in_4bit: bool = True
+    device_map: Union[str, Dict[str, str]] = "cuda:0"
+    quant_backend: str = "auto"  # auto | bnb | gptq | none
+    load_in_4bit: bool = True     # kept for backward compatibility with bnb
     max_context_tokens: int = 4000   # context budget
     max_new_tokens: int = 64
     temperature: float = 0.0
@@ -95,15 +96,40 @@ class QwenReader:
         self.tokenizer = None
         self.model = None
 
-    def load(self) -> None:
-        quant = None
+    def _resolve_quant_backend(self) -> str:
+        backend = (self.cfg.quant_backend or "auto").strip().lower()
+        if backend != "auto":
+            return backend
+        if "gptq" in self.cfg.model_name.lower():
+            return "gptq"
         if self.cfg.load_in_4bit:
+            return "bnb"
+        return "none"
+
+    def load(self) -> None:
+        backend = self._resolve_quant_backend()
+        quant = None
+        model_kwargs: Dict[str, Any] = {
+            "device_map": self.cfg.device_map,
+            "trust_remote_code": True,
+        }
+
+        if backend == "bnb":
             quant = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
             )
+            model_kwargs["quantization_config"] = quant
+            model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
+        elif backend == "gptq":
+            # GPTQ models provide their own quantization config in model files.
+            model_kwargs["torch_dtype"] = "auto"
+        elif backend == "none":
+            model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
+        else:
+            raise ValueError(f"Unsupported quant_backend='{self.cfg.quant_backend}'. Use auto|bnb|gptq|none.")
 
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.cfg.model_name,
@@ -111,13 +137,7 @@ class QwenReader:
             trust_remote_code=True,
         )
 
-        self.model = AutoModelForCausalLM.from_pretrained(
-            self.cfg.model_name,
-            device_map=self.cfg.device_map,
-            quantization_config=quant,
-            dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
-            trust_remote_code=True,
-        )
+        self.model = AutoModelForCausalLM.from_pretrained(self.cfg.model_name, **model_kwargs)
         self.model.eval()
 
     def build_prompt(self, question: str, contexts: List[Dict[str, Any]]) -> str:
@@ -233,7 +253,7 @@ if __name__ == "__main__":
     reader = QwenReader(ReaderConfig(
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
         device_map={"": "cuda:1"},
-        load_in_4bit=True,
+        quant_backend="gptq",
         max_context_tokens=3000,
         max_new_tokens=48,
         temperature=0,
