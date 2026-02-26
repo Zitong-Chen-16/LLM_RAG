@@ -21,8 +21,8 @@ def iter_jsonl(path: Path):
             if line:
                 yield json.loads(line)
 
-TOKEN_RE = re.compile(r"[a-z0-9]+(?:[’'\\-/][a-z0-9]+)*", flags=re.IGNORECASE)
-SPLIT_INNER_RE = re.compile(r"[’'\\-/]+")
+TOKEN_RE = re.compile(r"[a-z0-9]+(?:[-/'’][a-z0-9]+)*", flags=re.IGNORECASE)
+SPLIT_INNER_RE = re.compile(r"[-/'’]+")
 
 def tokenize(text: str) -> List[str]:
     """
