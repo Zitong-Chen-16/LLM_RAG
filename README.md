@@ -44,7 +44,7 @@ For your test set and the RAG systems, you will first need to compile a knowledg
 - [Encyclopedia Brittanica page](https://www.britannica.com/place/Pittsburgh)
 - [Visit Pittsburgh webpage](https://www.visitpittsburgh.com): This website also contains subpages that would be useful for other topics (see below), like events, sports, music, food, etc.
 - City of Pittsburgh [Tax Regulations](https://pittsburghpa.gov/finance/tax-forms): See the links under the "Regulations" column of the table
-- City of Pittsburgh [2025 Operating Budget]([https://apps.pittsburghpa.gov/redtail/images/23255_2024_Operating_Budget.pdf](https://www.pittsburghpa.gov/files/assets/city/v/4/omb/documents/operating-budgets/2025-operating-budget.pdf))
+- City of Pittsburgh [2025 Operating Budget](https://www.pittsburghpa.gov/files/assets/city/v/4/omb/documents/operating-budgets/2025-operating-budget.pdf)
 - [About CMU & CMU History](https://www.cmu.edu/about/)
 
 **Events in Pittsburgh and CMU** (We will only ask about annual/recurring events and events happening after March 19.)
@@ -253,7 +253,6 @@ The following points (max. 100 points) are derived from the results and your rep
     - What was your justification for trying these methods?
   - **Results** (10 points): report raw numbers from your experiments. Please include the following details:
     - What was the result of each model that you tried on the public leaderboard?
-    - Are the results statistically significant?
   - **Analysis** (10 points): perform quantitative/qualitative analysis and present your findings:
     - Perform a comparison of the outputs on a more fine-grained level than just holistic accuracy numbers, and report the results. For instance, how did your models perform across various types of questions?
     - Report your results across at least two variations you tried, including variations of models, which data it was trained on, training strategy, embedding models, retrievers, re-rankers, etc.
