@@ -410,24 +410,10 @@ class QwenReader:
         return ans, used_chunk_ids
 
 if __name__ == "__main__":
-    
+    from query_ppl import mmr_select_chunk_ids, _retrieval_confidence
+
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
-
-    # Hybrid retriever
-    # retriever = build_default_hybrid(
-    #     bm25_dir=Path("indexes/bm25"),
-    #     dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2"),
-    #     chunks_path=chunks_path,
-    #     w_dense=0.6,
-    #     w_sparse=0.4,
-    #     k_dense=200,
-    #     k_sparse=200,
-    #     device="cuda:0",
-    #     model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
-    #     quant_backend="none",
-    #     fusion_method='rrf'
-    # )
 
     retriever = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
@@ -437,7 +423,7 @@ if __name__ == "__main__":
         w_sparse=0.4,
         k_dense=200,
         k_sparse=200,
-        device="cuda:0",
+        device="cuda:1",
         model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
         quant_backend="none",
         sparse_title_weight=3,
@@ -452,10 +438,10 @@ if __name__ == "__main__":
         rrf_k=60,
     )
 
-    # Reader
+    # Reader (same quant setup as query_ppl runtime args)
     reader = QwenReader(ReaderConfig(
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
-        device_map={"": "cuda:1"},
+        device_map={"": "cuda:0"},
         quant_backend="gptq",
         max_context_tokens=3500,
         max_new_tokens=48,
@@ -473,34 +459,77 @@ if __name__ == "__main__":
         "What is the specialty of Fet Fisk in Pittsburgh?",
     ]
 
+    # Match query_ppl defaults.
+    k_retrieve = 80
+    stage1_k = 32
+    k_ctx = 6
+    mmr_lambda = 0.75
+    temporal_boost_weight = 0.12
+    retrieval_conf_threshold = 0.18
+    low_conf_k_retrieve = 160
+    low_conf_stage1_k = 56
+    reader_rerank = True
+    rerank_pool_k = 18
+    rerank_batch_size = 6
+    rerank_max_chunk_chars = 1000
+    dedup_doc = True
+
     for q in queries:
-        retrieved = retriever.retrieve(q, k=80)
+        retrieved = retriever.retrieve(q, k=k_retrieve)
+        conf = _retrieval_confidence(retrieved)
+        s1 = stage1_k
+        if conf < retrieval_conf_threshold:
+            retrieved = retriever.retrieve(q, k=low_conf_k_retrieve)
+            s1 = max(s1, low_conf_stage1_k)
+
         selected_ids = mmr_select_chunk_ids(
             query=q,
             retrieved=retrieved,
             chunk_map=chunk_map,
             retriever=retriever,
-            stage1_k=32,
-            out_k=6,
-            mmr_lambda=0.75,
+            stage1_k=s1,
+            out_k=max(k_ctx, rerank_pool_k if reader_rerank else k_ctx),
+            mmr_lambda=mmr_lambda,
+            temporal_boost_weight=temporal_boost_weight,
         )
+
+        if reader_rerank:
+            pool_ids = selected_ids[: max(k_ctx, rerank_pool_k)]
+            pool_pairs = [(cid, chunk_map[cid]) for cid in pool_ids if cid in chunk_map]
+            pool_chunks = [c for _cid, c in pool_pairs]
+            if pool_chunks:
+                rerank_scores = reader.rerank_chunks(
+                    q,
+                    pool_chunks,
+                    batch_size=rerank_batch_size,
+                    max_chunk_chars=rerank_max_chunk_chars,
+                )
+                reranked = sorted(
+                    zip([cid for cid, _ in pool_pairs], rerank_scores),
+                    key=lambda x: (x[1], x[0]),
+                    reverse=True,
+                )
+                selected_ids = [cid for cid, _ in reranked]
+
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
-        if len(ctx) < 6:
-            seen_ids = set(selected_ids)
+        if dedup_doc:
+            ctx = dedup_by_doc_id(ctx, k_ctx)
+        else:
+            ctx = ctx[:k_ctx]
+
+        if len(ctx) < k_ctx:
+            seen_ids = {c.get("chunk_id") for c in ctx if c.get("chunk_id")}
             for cid, _sc in retrieved:
                 if cid in chunk_map and cid not in seen_ids:
                     ctx.append(chunk_map[cid])
                     seen_ids.add(cid)
-                    if len(ctx) >= 6:
+                    if dedup_doc:
+                        ctx = dedup_by_doc_id(ctx, k_ctx)
+                    if len(ctx) >= k_ctx:
                         break
-        dedup_doc = True
-        if dedup_doc:
-            ctx = dedup_by_doc_id(ctx, 8)
-        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]  # k_ctx=6
-        ans, _used = reader.answer(q, ctx)
-        ans = (ans or "").strip()
 
-        ans, used = reader.answer(q, ctx)
+        ans, _used = reader.answer(q, ctx)
+        ans = (ans or "").strip() or "I don't know"
         print("\nQ:", q)
         print("A:", ans)
-        print("used:", used[:3], ("..." if len(used) > 3 else ""))
+        print("used:", _used[:3], ("..." if len(_used) > 3 else ""))

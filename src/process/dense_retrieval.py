@@ -270,39 +270,73 @@ class DenseRetriever:
         return out
 
 if __name__ == "__main__":
-    out_fpath = Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2")
-    if not (out_fpath / "faiss.index").exists():
-        r = DenseRetriever(
-            index_dir=out_fpath,
-            chunks_path=Path("data/processed/chunks.jsonl"),
+    def _minmax(v: np.ndarray) -> np.ndarray:
+        if v.size == 0:
+            return v
+        mn = float(v.min())
+        mx = float(v.max())
+        if mx - mn < 1e-12:
+            return np.zeros_like(v, dtype=np.float32)
+        return ((v - mn) / (mx - mn)).astype(np.float32)
+
+    def _retrieval_confidence(retrieved: List[Tuple[str, float]]) -> float:
+        if not retrieved:
+            return 0.0
+        scores = np.array([float(sc) for _cid, sc in retrieved[: min(12, len(retrieved))]], dtype=np.float32)
+        if scores.size == 1:
+            return 0.0
+        sn = _minmax(scores)
+        top = float(sn[0])
+        second = float(sn[1]) if len(sn) > 1 else 0.0
+        gap = max(0.0, top - second)
+        tail = float(sn[2:6].mean()) if len(sn) > 2 else second
+        conf = 0.55 * gap + 0.25 * top + 0.20 * max(0.0, top - tail)
+        return float(min(max(conf, 0.0), 1.0))
+
+    # Match query_ppl defaults for retrieval depth/adaptive fallback.
+    k_retrieve = 80
+    low_conf_k_retrieve = 160
+    retrieval_conf_threshold = 0.18
+
+    index_dir = Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2")
+    chunks_path = Path("data/processed/chunks.jsonl")
+    if not (index_dir / "faiss.index").exists():
+        r_build = DenseRetriever(
+            index_dir=index_dir,
+            chunks_path=chunks_path,
             model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             device="cuda:1",
             batch_size=16,
             normalize=True,
-            quant_backend="none"
-            )
-        r.build(save_embeddings=False)
-        print("Dense FAISS index built at indexes/dense")
+            quant_backend="none",
+        )
+        r_build.build(save_embeddings=False)
+        print(f"Dense FAISS index built at {index_dir}")
 
-    # test retrieval
-    chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
-
-    r = DenseRetriever(index_dir=out_fpath, 
-                       chunks_path=chunks_path, 
-                       model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct", #Alibaba-NLP/gte-Qwen2-1.5B-instruct | "Alibaba-NLP/gte-Qwen2-7B-instruct"
-                       device="cuda:1",
-                       batch_size=8,
-                       normalize=True,
-                       quant_backend="none"
-                       )
+    r = DenseRetriever(
+        index_dir=index_dir,
+        chunks_path=chunks_path,
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        device="cuda:1",
+        batch_size=8,
+        normalize=True,
+        quant_backend="none",
+    )
     r.load()
 
-    
-    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
+    test_queries = [
+        "Which Pittsburgh restaurant is famous for its cheesesteaks?",
+        "What are the official colors of Carnegie Mellon University?",
+    ]
+    for q in test_queries:
+        retrieved = r.retrieve(q, k=k_retrieve)
+        conf = _retrieval_confidence(retrieved)
+        if conf < retrieval_conf_threshold:
+            retrieved = r.retrieve(q, k=low_conf_k_retrieve)
 
-    res = r.retrieve(q, k=5)
-
-    cid, sc = res[0]
-    print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")        
+        print(f"\nQUERY: {q}")
+        print(f"confidence={conf:.3f}  retrieved={len(retrieved)}")
+        for cid, sc in retrieved[:5]:
+            text = (chunk_map.get(cid, {}).get("text") or "").replace("\n", " ")
+            print(f"  {sc:.4f}  {cid}  |  {text[:140]}")

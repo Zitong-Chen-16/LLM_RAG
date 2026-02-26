@@ -195,22 +195,76 @@ class SparseRetriever:
         return fused[:k]
 
 if __name__ == "__main__":
-    
+    def _minmax(v):
+        if not v:
+            return []
+        mn, mx = min(v), max(v)
+        if mx - mn < 1e-12:
+            return [0.0 for _ in v]
+        return [(x - mn) / (mx - mn) for x in v]
 
-    if not (Path("indexes/bm25") / "bm25").exists():
-        retriever = SparseRetriever(index_dir=Path("indexes/bm25"))
+    def _retrieval_confidence(retrieved: List[Tuple[str, float]]) -> float:
+        if not retrieved:
+            return 0.0
+        scores = [float(sc) for _cid, sc in retrieved[: min(12, len(retrieved))]]
+        if len(scores) == 1:
+            return 0.0
+        sn = _minmax(scores)
+        top = sn[0]
+        second = sn[1] if len(sn) > 1 else 0.0
+        gap = max(0.0, top - second)
+        tail = sum(sn[2:6]) / max(1, len(sn[2:6])) if len(sn) > 2 else second
+        conf = 0.55 * gap + 0.25 * top + 0.20 * max(0.0, top - tail)
+        return float(min(max(conf, 0.0), 1.0))
+
+    # Match query_ppl sparse defaults.
+    k_retrieve = 80
+    low_conf_k_retrieve = 160
+    retrieval_conf_threshold = 0.18
+
+    bm25_dir = Path("indexes/bm25")
+    if not (bm25_dir / "bm25").exists():
+        retriever = SparseRetriever(
+            index_dir=bm25_dir,
+            title_weight=3,
+            heading_weight=2,
+            body_weight=1,
+            add_bigrams=True,
+            enable_prf=True,
+            prf_k=8,
+            prf_terms=6,
+            prf_alpha=0.65,
+        )
         retriever.build()
         print("BM25 index built at indexes/bm25")
 
-    # test retrieval
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
-    
-    r = SparseRetriever(index_dir=Path("indexes/bm25"))
+    r = SparseRetriever(
+        index_dir=bm25_dir,
+        title_weight=3,
+        heading_weight=2,
+        body_weight=1,
+        add_bigrams=True,
+        enable_prf=True,
+        prf_k=8,
+        prf_terms=6,
+        prf_alpha=0.65,
+    )
     r.load()
 
-    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
-    res = r.retrieve(q, k=5)
-    cid, sc = res[0]
-    print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")
+    test_queries = [
+        "Which Pittsburgh restaurant is famous for its cheesesteaks?",
+        "What are the official colors of Carnegie Mellon University?",
+    ]
+    for q in test_queries:
+        retrieved = r.retrieve(q, k=k_retrieve)
+        conf = _retrieval_confidence(retrieved)
+        if conf < retrieval_conf_threshold:
+            retrieved = r.retrieve(q, k=low_conf_k_retrieve)
+
+        print(f"\nQUERY: {q}")
+        print(f"confidence={conf:.3f}  retrieved={len(retrieved)}")
+        for cid, sc in retrieved[:5]:
+            text = (chunk_map.get(cid, {}).get("text") or "").replace("\n", " ")
+            print(f"  {sc:.4f}  {cid}  |  {text[:140]}")

@@ -120,25 +120,69 @@ def build_default_hybrid(
     )
 
 if __name__ == "__main__":
+    from query_ppl import mmr_select_chunk_ids, _retrieval_confidence
+
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
 
+    # Match query_ppl defaults.
+    k_retrieve = 80
+    stage1_k = 32
+    k_ctx = 6
+    mmr_lambda = 0.75
+    temporal_boost_weight = 0.12
+    retrieval_conf_threshold = 0.18
+    low_conf_k_retrieve = 160
+    low_conf_stage1_k = 56
+
     r = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense"),
+        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2"),
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
-        k_dense=100,
-        k_sparse=100,
-        device="cuda:0",
-        model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2"
-        quant_backend="8bit",
-        fusion_method='rrf'
+        k_dense=200,
+        k_sparse=200,
+        device="cuda:1",
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        quant_backend="none",
+        sparse_title_weight=3,
+        sparse_heading_weight=2,
+        sparse_body_weight=1,
+        sparse_add_bigrams=True,
+        sparse_prf=True,
+        sparse_prf_k=8,
+        sparse_prf_terms=6,
+        sparse_prf_alpha=0.65,
+        fusion_method="rrf",
+        rrf_k=60,
     )
 
-    q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
-    res = r.retrieve(q, k=5)
-    cid, sc = res[0]
-    print("\nQUERY:", q)
-    print(f"  {sc:.4f}  {cid}  |  {chunk_map[cid].get('text','')}")
+    test_queries = [
+        "Which Pittsburgh restaurant is famous for its cheesesteaks?",
+        "What are the official colors of Carnegie Mellon University?",
+    ]
+    for q in test_queries:
+        retrieved = r.retrieve(q, k=k_retrieve)
+        conf = _retrieval_confidence(retrieved)
+        stage1 = stage1_k
+        if conf < retrieval_conf_threshold:
+            retrieved = r.retrieve(q, k=low_conf_k_retrieve)
+            stage1 = max(stage1, low_conf_stage1_k)
+
+        selected_ids = mmr_select_chunk_ids(
+            query=q,
+            retrieved=retrieved,
+            chunk_map=chunk_map,
+            retriever=r,
+            stage1_k=stage1,
+            out_k=k_ctx,
+            mmr_lambda=mmr_lambda,
+            temporal_boost_weight=temporal_boost_weight,
+        )
+
+        print(f"\nQUERY: {q}")
+        print(f"confidence={conf:.3f}  retrieved={len(retrieved)}  selected={len(selected_ids)}")
+        for cid in selected_ids[:5]:
+            text = (chunk_map.get(cid, {}).get("text") or "").replace("\n", " ")
+            print(f"  {cid}  |  {text[:140]}")
