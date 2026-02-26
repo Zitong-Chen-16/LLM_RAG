@@ -37,7 +37,7 @@ class DenseRetriever:
     chunks_path: Path = Path("data/processed/chunks.jsonl")
     model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
     device: str = "cuda"
-    batch_size: int = 256
+    batch_size: int = 8
     normalize: bool = True
     quant_backend: str = "none"  # none | 8bit | 4bit
 
@@ -78,7 +78,7 @@ class DenseRetriever:
                         )
                     return SentenceTransformer(
                         self.model_name,
-                        device=None,
+                        device=self.device,
                         **st_kwargs,
                         model_kwargs={
                             "quantization_config": quant_config,
@@ -194,7 +194,7 @@ if __name__ == "__main__":
             chunks_path=Path("data/processed/chunks.jsonl"),
             model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
             device="cuda:1",
-            batch_size=1,
+            batch_size=8,
             normalize=True,
             quant_backend="8bit"
             )
@@ -207,7 +207,7 @@ if __name__ == "__main__":
 
     r = DenseRetriever(index_dir=Path("indexes/dense"), 
                        chunks_path=chunks_path, 
-                       model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+                       model_name="Alibaba-NLP/gte-Qwen2-7B-instruct", #Alibaba-NLP/gte-Qwen2-1.5B-instruct
                        device="cuda:1")
     r.load()
 

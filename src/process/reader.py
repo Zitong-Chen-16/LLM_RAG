@@ -328,10 +328,11 @@ if __name__ == "__main__":
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
-        k_dense=100,
-        k_sparse=100,
+        k_dense=150,
+        k_sparse=150,
         device="cuda:0",
-        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2"
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
+        quant_backend="none",
         fusion_method='rrf'
     )
 
@@ -364,7 +365,7 @@ if __name__ == "__main__":
             chunk_map=chunk_map,
             retriever=retriever,
             stage1_k=50,
-            out_k=10,
+            out_k=20,
             mmr_lambda=0.75,
         )
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
@@ -376,9 +377,9 @@ if __name__ == "__main__":
                     seen_ids.add(cid)
                     if len(ctx) >= 6:
                         break
-        dedup_doc = False
+        dedup_doc = True
         if dedup_doc:
-            ctx = dedup_by_doc_id(ctx, 6)
+            ctx = dedup_by_doc_id(ctx, 20)
         ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]  # k_ctx=6
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()
