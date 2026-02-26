@@ -229,7 +229,7 @@ class QwenReader:
 
         system = (
             "You are a question answering system.\n"
-            "Answer the question based on the provided context.\n"
+            "Answer the question based on the provided context and your knowledge.\n"
             "Output ONLY the answer (no explanations).\n"
             "KEEP YOUR ANSWER CONCISE AND NO MORE THAN ONE SENTENCE.\n"
             "Do not specify if the answer comes from context or is based on your own knowledge.\n"
@@ -324,15 +324,15 @@ if __name__ == "__main__":
     # Hybrid retriever
     retriever = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct"),
+        dense_dir=Path("indexes/dense"),
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
         k_dense=150,
         k_sparse=150,
         device="cuda:0",
-        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
-        quant_backend="none",
+        model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
+        quant_backend="8bit",
         fusion_method='rrf'
     )
 
@@ -341,7 +341,7 @@ if __name__ == "__main__":
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
         device_map={"": "cuda:1"},
         quant_backend="gptq",
-        max_context_tokens=24000,
+        max_context_tokens=5000,
         max_new_tokens=48,
         temperature=0,
         top_p=1,
@@ -365,7 +365,7 @@ if __name__ == "__main__":
             chunk_map=chunk_map,
             retriever=retriever,
             stage1_k=50,
-            out_k=20,
+            out_k=8,
             mmr_lambda=0.75,
         )
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
@@ -379,7 +379,7 @@ if __name__ == "__main__":
                         break
         dedup_doc = True
         if dedup_doc:
-            ctx = dedup_by_doc_id(ctx, 20)
+            ctx = dedup_by_doc_id(ctx, 8)
         ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]  # k_ctx=6
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()
