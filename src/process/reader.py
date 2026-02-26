@@ -80,7 +80,7 @@ def _format_context_chunk(i: int, c: Dict[str, Any]) -> str:
 @dataclass
 class ReaderConfig:
     model_name: str = "Qwen/Qwen2.5-14B-Instruct"
-    device_map: str = "auto"
+    device_map: str = "cuda:0"
     load_in_4bit: bool = True
     max_context_tokens: int = 4000   # context budget
     max_new_tokens: int = 64
@@ -218,23 +218,24 @@ if __name__ == "__main__":
     # Hybrid retriever
     retriever = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense"),
+        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct"),
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
         k_dense=100,
         k_sparse=100,
-        device="cuda",
-        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        device="cuda:0",
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2"
         fusion_method='rrf'
     )
 
     # Reader
     reader = QwenReader(ReaderConfig(
-        model_name="Qwen/Qwen2.5-14B-Instruct",
+        model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
+        device_map={"": "cuda:1"},
         load_in_4bit=True,
-        max_context_tokens=12000,
-        max_new_tokens=64,
+        max_context_tokens=3000,
+        max_new_tokens=48,
         temperature=0,
         top_p=1,
     ))
@@ -250,8 +251,11 @@ if __name__ == "__main__":
     ]
 
     for q in queries:
-        retrieved = retriever.retrieve(q, k=50)
-        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map][:10]  # k_ctx=6
+        retrieved = retriever.retrieve(q, k=20)
+        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]  # k_ctx=6
+        print(len(ctx), "chunks retrieved for question:", q)
+        ans, _used = reader.answer(q, ctx)
+        ans = (ans or "").strip()
 
         ans, used = reader.answer(q, ctx)
         print("\nQ:", q)

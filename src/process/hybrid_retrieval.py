@@ -104,13 +104,13 @@ if __name__ == "__main__":
 
     r = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense"),
+        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct"),
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
         k_dense=100,
         k_sparse=100,
-        device="cuda:1",
+        device="cuda:0",
     )
 
     q = "Which Pittsburgh restaurant is famous for its cheesesteaks?"
