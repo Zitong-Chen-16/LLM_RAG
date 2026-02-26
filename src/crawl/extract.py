@@ -42,6 +42,52 @@ def safe_domain_from_filename(name: str) -> str:
         return "en.wikipedia.org"
     return "baseline"
 
+def should_drop_stop_sections(
+    *,
+    domain: str,
+    source_url: str = "",
+    final_url: str = "",
+    title: str = "",
+) -> bool:
+    """
+    Enable aggressive tail-section trimming for sources that commonly contain
+    long References/External links tails.
+    """
+    d = (domain or "").lower()
+    su = (source_url or "").lower()
+    fu = (final_url or "").lower()
+    tt = (title or "").lower()
+    return (
+        "wikipedia.org" in d
+        or "wikipedia.org" in su
+        or "wikipedia.org" in fu
+        or tt.endswith(" - wikipedia")
+    )
+
+
+def clean_with_policy(
+    *,
+    text: str,
+    domain: str,
+    source_url: str = "",
+    final_url: str = "",
+    title: str = "",
+) -> str:
+    drop_stop = should_drop_stop_sections(
+        domain=domain,
+        source_url=source_url,
+        final_url=final_url,
+        title=title,
+    )
+    return clean_extracted_text(
+        text,
+        domain=domain,
+        drop_after_stop_section=drop_stop,
+        remove_citations=True,
+        # Keep URL placeholders/host labels so sentence structure remains intact.
+        remove_urls=False,
+    )
+
 
 
 def load_manifest(manifest_path: Path) -> Dict[str, dict]:
@@ -209,12 +255,12 @@ def main() -> None:
                 title = ""
                 text = extract_text_from_pdf(path, max_pages=max_pdf_pages)
 
-            text = clean_extracted_text(
-                text,
+            text = clean_with_policy(
+                text=text,
                 domain=domain,
-                drop_after_stop_section=False,
-                remove_citations=True,
-                remove_urls=False,
+                source_url=source_url,
+                final_url=final_url,
+                title=title,
             )
 
             if len(text) < args.min_chars:
@@ -256,12 +302,10 @@ def main() -> None:
 
             try:
                 title, text = extract_text_from_html(path.read_bytes())
-                text = clean_extracted_text(
-                    text,
+                text = clean_with_policy(
+                    text=text,
                     domain=inferred_domain,
-                    drop_after_stop_section=False,
-                    remove_citations=True,
-                    remove_urls=False,
+                    title=title,
                 )
                 if not title:
                     title = path.stem

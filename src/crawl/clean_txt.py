@@ -1,6 +1,7 @@
 import re
 import unicodedata
 from typing import Tuple, Optional
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
@@ -92,7 +93,8 @@ def clean_extracted_text(
 
     # 5) Optionally remove URLs (sometimes they dominate "External links")
     if remove_urls:
-        t = _URL_RE.sub("", t)
+        # Preserve sentence flow by replacing URLs with a link token instead of deleting.
+        t = _URL_RE.sub(" [link] ", t)
 
     # 6) Drop everything after "References"/"External links"/etc. (very effective for Wikipedia)
     if drop_after_stop_section:
@@ -121,6 +123,23 @@ def clean_extracted_text(
 
 URL_RE = re.compile(r"https?://\S+|www\.\S+", flags=re.IGNORECASE)
 
+def _link_label_from_url(url: str) -> str:
+    """
+    Return a short human-readable label for a URL to avoid dropping sentence content.
+    """
+    s = (url or "").strip()
+    if not s:
+        return "[link]"
+    if s.lower().startswith("www."):
+        s = "https://" + s
+    try:
+        host = (urlparse(s).netloc or "").lower()
+    except Exception:
+        host = ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host if host else "[link]"
+
 def sanitize_links_in_dom(soup: BeautifulSoup) -> None:
     """
     Modify soup in-place to preserve human-readable link text while dropping raw URLs.
@@ -133,17 +152,18 @@ def sanitize_links_in_dom(soup: BeautifulSoup) -> None:
         # If the anchor text is empty, but there is an href, don't drop surrounding sentence;
         # replace with nothing (or a single space).
         if not anchor_text:
-            a.replace_with(" ")
+            a.replace_with(_link_label_from_url(href))
             continue
 
         # If the visible text is basically a URL (or looks like it), keep no URL text.
-        # Replace the anchor with cleaned anchor text (URL stripped).
+        # Replace the anchor with cleaned anchor text (URL stripped), but keep
+        # a host label when nothing readable remains.
         cleaned = URL_RE.sub("", anchor_text).strip()
 
         # Some sites show "doi:10...." or very long link-like strings as anchor text
         # You can add more patterns if you like.
         if cleaned == "":
-            a.replace_with(" ")
+            a.replace_with(_link_label_from_url(href))
         else:
             a.replace_with(cleaned)
 
@@ -152,6 +172,6 @@ def sanitize_links_in_dom(soup: BeautifulSoup) -> None:
     for text_node in soup.find_all(string=True):
         s = str(text_node)
         if "http" in s or "www." in s:
-            new_s = URL_RE.sub("", s)
+            new_s = URL_RE.sub(" [link] ", s)
             if new_s != s:
                 text_node.replace_with(new_s)

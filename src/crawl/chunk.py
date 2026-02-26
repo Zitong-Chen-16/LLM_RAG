@@ -1,7 +1,7 @@
 """
 Chunking policy:
-- Target chunk size: 250–400 words (soft target) or 800–1200 chars (secondary guard)
-- Overlap: 50–100 words
+- Target chunk size: 100-180 words (soft target) or 500-900 chars (secondary guard)
+- Overlap: 20-40 words
 - Boundary-aware:
   1) split by headings/paragraphs first
   2) if paragraph too long -> split by sentences
@@ -17,20 +17,44 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Iterator, List, Optional, Tuple
 
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+]
+MONTH_ABBR = {
+    "jan": "january",
+    "feb": "february",
+    "mar": "march",
+    "apr": "april",
+    "jun": "june",
+    "jul": "july",
+    "aug": "august",
+    "sep": "september",
+    "sept": "september",
+    "oct": "october",
+    "nov": "november",
+    "dec": "december",
+}
+YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+EVENT_TERMS = {
+    "event", "events", "festival", "concert", "performance", "show",
+    "upcoming", "schedule", "tour", "exhibit", "exhibition", "game",
+}
+
 @dataclass
 class ChunkConfig:
-    min_words: int = 200          
-    target_words: int = 320       
-    min_words_chunk: int = 250
-    max_words_chunk: int = 400
-    overlap_words: int = 80       
+    min_words: int = 120
+    target_words: int = 140
+    min_words_chunk: int = 100
+    max_words_chunk: int = 180
+    overlap_words: int = 30
 
-    min_chars_chunk: int = 800    
-    max_chars_chunk: int = 1200
+    min_chars_chunk: int = 500
+    max_chars_chunk: int = 900
 
-    long_para_words: int = 450
-    long_sentence_words: int = 120
-    window_words: int = 320
+    long_para_words: int = 220
+    long_sentence_words: int = 100
+    window_words: int = 160
 
 
 def word_count(s: str) -> int:
@@ -163,6 +187,27 @@ def window_words(words: List[str], size: int, overlap: int) -> List[str]:
             break
         i += step
     return out
+
+
+def extract_temporal_metadata(title: str, heading: Optional[str], text: str) -> dict:
+    blob = "\n".join([title or "", heading or "", text or ""])
+    low = blob.lower()
+
+    years = sorted(set(YEAR_RE.findall(blob)))
+    months = [m for m in MONTHS if re.search(rf"\b{m}\b", low)]
+    for abbr, full in MONTH_ABBR.items():
+        if full in months:
+            continue
+        if re.search(rf"\b{abbr}\.?\b", low):
+            months.append(full)
+
+    has_event_terms = any(re.search(rf"\b{re.escape(t)}\b", low) for t in EVENT_TERMS)
+
+    return {
+        "years": years,
+        "months": months,
+        "has_event_terms": has_event_terms,
+    }
 
 
 def split_block_if_needed(block: str, cfg: ChunkConfig) -> List[str]:
@@ -309,12 +354,12 @@ def main() -> None:
     ap.add_argument("--out_chunks", default="data/processed/chunks.jsonl")
     ap.add_argument("--overwrite", action="store_true")
     # main knobs
-    ap.add_argument("--min_words_chunk", type=int, default=250)
-    ap.add_argument("--max_words_chunk", type=int, default=400)
-    ap.add_argument("--overlap_words", type=int, default=80)
-    ap.add_argument("--min_chars_chunk", type=int, default=800)
-    ap.add_argument("--max_chars_chunk", type=int, default=1200)
-    ap.add_argument("--min_doc_words_single_chunk", type=int, default=200)
+    ap.add_argument("--min_words_chunk", type=int, default=100)
+    ap.add_argument("--max_words_chunk", type=int, default=180)
+    ap.add_argument("--overlap_words", type=int, default=30)
+    ap.add_argument("--min_chars_chunk", type=int, default=500)
+    ap.add_argument("--max_chars_chunk", type=int, default=900)
+    ap.add_argument("--min_doc_words_single_chunk", type=int, default=120)
     args = ap.parse_args()
 
     cfg = ChunkConfig(
@@ -341,23 +386,35 @@ def main() -> None:
         text = doc.get("text", "") or ""
         title = doc.get("title", "") or ""
         source_url = doc.get("source_url", "") or ""
+        final_url = doc.get("final_url", "") or ""
         domain = doc.get("domain", "") or ""
+        content_type = doc.get("content_type", "") or ""
+        source = doc.get("source", "") or ""
+        retrieved_at = doc.get("retrieved_at", "") or ""
 
         # If doc is short, keep as one chunk
         if word_count(text) < cfg.min_words:
             chunk_text = text.strip()
             if chunk_text:
                 chunk_id = f"{doc_id}:c0"
+                temporal = extract_temporal_metadata(title, None, chunk_text)
                 write_jsonl(out_path, {
                     "chunk_id": chunk_id,
                     "doc_id": doc_id,
                     "domain": domain,
                     "source_url": source_url,
+                    "final_url": final_url,
                     "title": title,
                     "section_heading": None,
                     "text": chunk_text,
                     "char_start": 0,
                     "char_end": len(chunk_text),
+                    "content_type": content_type,
+                    "source": source,
+                    "retrieved_at": retrieved_at,
+                    "years": temporal["years"],
+                    "months": temporal["months"],
+                    "has_event_terms": temporal["has_event_terms"],
                 })
                 n_chunks += 1
             continue
@@ -367,16 +424,24 @@ def main() -> None:
 
         for i, (heading, chunk_text, cs, ce) in enumerate(packed):
             chunk_id = f"{doc_id}:c{i}"
+            temporal = extract_temporal_metadata(title, heading, chunk_text)
             write_jsonl(out_path, {
                 "chunk_id": chunk_id,
                 "doc_id": doc_id,
                 "domain": domain,
                 "source_url": source_url,
+                "final_url": final_url,
                 "title": title,
                 "section_heading": heading,
                 "text": chunk_text,
                 "char_start": cs,
                 "char_end": ce,
+                "content_type": content_type,
+                "source": source,
+                "retrieved_at": retrieved_at,
+                "years": temporal["years"],
+                "months": temporal["months"],
+                "has_event_terms": temporal["has_event_terms"],
             })
             n_chunks += 1
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Dict, Any, List
 
@@ -11,6 +12,35 @@ from reader import QwenReader, ReaderConfig
 from utils import load_chunk_text_map
 from dense_retrieval import build_embed_text
 import numpy as np
+
+MONTHS = [
+    "january", "february", "march", "april", "may", "june",
+    "july", "august", "september", "october", "november", "december",
+]
+MONTH_ABBR = {
+    "jan": "january",
+    "feb": "february",
+    "mar": "march",
+    "apr": "april",
+    "jun": "june",
+    "jul": "july",
+    "aug": "august",
+    "sep": "september",
+    "sept": "september",
+    "oct": "october",
+    "nov": "november",
+    "dec": "december",
+}
+YEAR_RE = re.compile(r"\b(?:19|20)\d{2}\b")
+TEMPORAL_TERMS = {
+    "when", "date", "day", "month", "year", "schedule", "upcoming",
+    "performing", "perform", "event", "events", "festival", "concert",
+    "happening", "held", "starting", "starts", "ending", "ends",
+}
+EVENT_TERMS = {
+    "event", "events", "festival", "concert", "performance", "show",
+    "upcoming", "schedule", "tour", "exhibit", "exhibition", "game",
+}
 
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
@@ -41,6 +71,85 @@ def _minmax(arr: np.ndarray) -> np.ndarray:
     return ((arr - mn) / (mx - mn)).astype(np.float32)
 
 
+def _extract_months(text: str) -> set[str]:
+    low = text.lower()
+    months = {m for m in MONTHS if re.search(rf"\b{m}\b", low)}
+    for abbr, full in MONTH_ABBR.items():
+        if re.search(rf"\b{abbr}\.?\b", low):
+            months.add(full)
+    return months
+
+
+def _extract_query_signals(query: str) -> Dict[str, Any]:
+    q = (query or "").strip()
+    low = q.lower()
+    years = set(YEAR_RE.findall(q))
+    months = _extract_months(low)
+    is_temporal = bool(
+        years
+        or months
+        or any(re.search(rf"\b{re.escape(t)}\b", low) for t in TEMPORAL_TERMS)
+    )
+    return {
+        "years": years,
+        "months": months,
+        "is_temporal": is_temporal,
+    }
+
+
+def _chunk_temporal_score(chunk: Dict[str, Any], query_signals: Dict[str, Any]) -> float:
+    if not query_signals.get("is_temporal", False):
+        return 0.0
+
+    years = {str(y) for y in (chunk.get("years") or []) if str(y)}
+    months = {str(m).lower() for m in (chunk.get("months") or []) if str(m)}
+
+    # Backward compatibility for old chunk files without temporal metadata.
+    if not years or not months:
+        blob = "\n".join(
+            [
+                str(chunk.get("title", "") or ""),
+                str(chunk.get("section_heading", "") or ""),
+                str(chunk.get("text", "") or "")[:1200],
+            ]
+        )
+        if not years:
+            years = set(YEAR_RE.findall(blob))
+        if not months:
+            months = _extract_months(blob)
+
+    q_years = query_signals["years"]
+    q_months = query_signals["months"]
+    score = 0.0
+
+    if q_years:
+        if years & q_years:
+            score += 1.0
+        elif years:
+            score -= 0.15
+
+    if q_months:
+        if months & q_months:
+            score += 0.6
+        elif months:
+            score -= 0.10
+
+    has_event_terms = bool(chunk.get("has_event_terms"))
+    if not has_event_terms:
+        text = (
+            f"{chunk.get('title', '')} "
+            f"{chunk.get('section_heading', '')} "
+            f"{str(chunk.get('text', '') or '')[:600]}"
+        ).lower()
+        has_event_terms = any(re.search(rf"\b{re.escape(t)}\b", text) for t in EVENT_TERMS)
+
+    if has_event_terms:
+        score += 0.2
+    if years or months:
+        score += 0.1
+    return score
+
+
 def mmr_select_chunk_ids(
     *,
     query: str,
@@ -50,6 +159,7 @@ def mmr_select_chunk_ids(
     stage1_k: int,
     out_k: int,
     mmr_lambda: float,
+    temporal_boost_weight: float,
 ) -> List[str]:
     cands = [(cid, float(sc)) for cid, sc in retrieved if cid in chunk_map][:stage1_k]
     if not cands:
@@ -66,8 +176,19 @@ def mmr_select_chunk_ids(
     dense_rel = (doc_emb @ q_emb).astype(np.float32)
     dense_rel_n = _minmax(dense_rel)
 
-    # Blend dense relevance with hybrid prior, then enforce diversity with MMR.
+    # Blend dense relevance with hybrid prior.
     rel = (0.8 * dense_rel_n + 0.2 * fused_n).astype(np.float32)
+
+    # Optional temporal/event metadata boost for date-sensitive queries.
+    query_signals = _extract_query_signals(query)
+    if query_signals["is_temporal"] and temporal_boost_weight > 0:
+        temporal_weight = min(max(float(temporal_boost_weight), 0.0), 0.35)
+        temporal_raw = np.array(
+            [_chunk_temporal_score(chunk_map[cid], query_signals) for cid in cand_ids],
+            dtype=np.float32,
+        )
+        temporal_n = _minmax(temporal_raw)
+        rel = ((1.0 - temporal_weight) * rel + temporal_weight * temporal_n).astype(np.float32)
 
     selected: List[int] = []
     remaining = set(range(len(cand_ids)))
@@ -101,16 +222,18 @@ def main():
     ap.add_argument("--bm25_dir", default="indexes/bm25")
     ap.add_argument("--dense_dir", default="indexes/dense_gte-Qwen2-1.5B-instruct")
 
-    ap.add_argument("--k_retrieve", type=int, default=20, help="Initial candidate count from hybrid retriever")
-    ap.add_argument("--k_ctx", type=int, default=20, help="How many chunks to pass to reader")
-    ap.add_argument("--stage1_k", type=int, default=20, help="Top candidates considered by MMR reranker")
+    ap.add_argument("--k_retrieve", type=int, default=80, help="Initial candidate count from hybrid retriever")
+    ap.add_argument("--k_ctx", type=int, default=6, help="How many chunks to pass to reader")
+    ap.add_argument("--stage1_k", type=int, default=32, help="Top candidates considered by MMR reranker")
     ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
-    ap.add_argument("--dedup_doc", action="store_true", help="Deduplicate context chunks by doc_id")
+    ap.add_argument("--temporal_boost_weight", type=float, default=0.12, help="Weight for date/event metadata boost")
+    ap.add_argument("--dedup_doc", action=argparse.BooleanOptionalAction, default=True,
+                    help="Deduplicate context chunks by doc_id")
 
     ap.add_argument("--w_dense", type=float, default=0.6)
     ap.add_argument("--w_sparse", type=float, default=0.4)
-    ap.add_argument("--k_dense", type=int, default=150)
-    ap.add_argument("--k_sparse", type=int, default=150)
+    ap.add_argument("--k_dense", type=int, default=200)
+    ap.add_argument("--k_sparse", type=int, default=200)
     ap.add_argument("--fusion_method", choices=["rrf", "minmax"], default="rrf")
     ap.add_argument("--rrf_k", type=int, default=60)
     ap.add_argument("--embed_model", default="Alibaba-NLP/gte-Qwen2-1.5B-instruct")
@@ -119,8 +242,8 @@ def main():
     ap.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct")
     ap.add_argument("--reader_device", type=str, default="cuda:0", help="Reader device: auto / cuda:0 / cuda:1")
     ap.add_argument("--quant_backend", choices=["auto", "bnb", "gptq", "none"], default="auto")
-    ap.add_argument("--max_context_tokens", type=int, default=12000)
-    ap.add_argument("--max_new_tokens", type=int, default=64)
+    ap.add_argument("--max_context_tokens", type=int, default=3500)
+    ap.add_argument("--max_new_tokens", type=int, default=48)
     ap.add_argument("--temperature", type=float, default=0.0)
     ap.add_argument("--top_p", type=float, default=1.0)
     ap.add_argument("--null_answer", default="I don't know")
@@ -182,6 +305,7 @@ def main():
             stage1_k=args.stage1_k,
             out_k=args.k_ctx,
             mmr_lambda=args.mmr_lambda,
+            temporal_boost_weight=args.temporal_boost_weight,
         )
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
 
