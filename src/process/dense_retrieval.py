@@ -270,16 +270,16 @@ class DenseRetriever:
         return out
 
 if __name__ == "__main__":
-
-    if not (Path("indexes/dense") / "faiss.index").exists():
+    out_fpath = Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2")
+    if not (out_fpath / "faiss.index").exists():
         r = DenseRetriever(
-            index_dir=Path("indexes/dense"),
+            index_dir=out_fpath,
             chunks_path=Path("data/processed/chunks.jsonl"),
-            model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
+            model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
             device="cuda:1",
-            batch_size=8,
+            batch_size=16,
             normalize=True,
-            quant_backend="8bit"
+            quant_backend="none"
             )
         r.build(save_embeddings=False)
         print("Dense FAISS index built at indexes/dense")
@@ -288,10 +288,14 @@ if __name__ == "__main__":
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
 
-    r = DenseRetriever(index_dir=Path("indexes/dense"), 
+    r = DenseRetriever(index_dir=out_fpath, 
                        chunks_path=chunks_path, 
-                       model_name="Alibaba-NLP/gte-Qwen2-7B-instruct", #Alibaba-NLP/gte-Qwen2-1.5B-instruct
-                       device="cuda:1")
+                       model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct", #Alibaba-NLP/gte-Qwen2-1.5B-instruct | "Alibaba-NLP/gte-Qwen2-7B-instruct"
+                       device="cuda:1",
+                       batch_size=8,
+                       normalize=True,
+                       quant_backend="none"
+                       )
     r.load()
 
     

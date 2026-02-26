@@ -322,18 +322,41 @@ if __name__ == "__main__":
     chunk_map = load_chunk_text_map(chunks_path)
 
     # Hybrid retriever
+    # retriever = build_default_hybrid(
+    #     bm25_dir=Path("indexes/bm25"),
+    #     dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2"),
+    #     chunks_path=chunks_path,
+    #     w_dense=0.6,
+    #     w_sparse=0.4,
+    #     k_dense=200,
+    #     k_sparse=200,
+    #     device="cuda:0",
+    #     model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
+    #     quant_backend="none",
+    #     fusion_method='rrf'
+    # )
+
     retriever = build_default_hybrid(
         bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense"),
+        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2"),
         chunks_path=chunks_path,
         w_dense=0.6,
         w_sparse=0.4,
-        k_dense=150,
-        k_sparse=150,
+        k_dense=200,
+        k_sparse=200,
         device="cuda:0",
-        model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",   #"Alibaba-NLP/gte-Qwen2-1.5B-instruct" | "sentence-transformers/all-MiniLM-L6-v2" | "Alibaba-NLP/gte-Qwen2-7B-instruct"
-        quant_backend="8bit",
-        fusion_method='rrf'
+        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        quant_backend="none",
+        sparse_title_weight=3,
+        sparse_heading_weight=2,
+        sparse_body_weight=1,
+        sparse_add_bigrams=True,
+        sparse_prf=True,
+        sparse_prf_k=8,
+        sparse_prf_terms=6,
+        sparse_prf_alpha=0.65,
+        fusion_method='rrf',
+        rrf_k=60,
     )
 
     # Reader
@@ -341,7 +364,7 @@ if __name__ == "__main__":
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
         device_map={"": "cuda:1"},
         quant_backend="gptq",
-        max_context_tokens=5000,
+        max_context_tokens=3500,
         max_new_tokens=48,
         temperature=0,
         top_p=1,
@@ -358,14 +381,14 @@ if __name__ == "__main__":
     ]
 
     for q in queries:
-        retrieved = retriever.retrieve(q, k=50)
+        retrieved = retriever.retrieve(q, k=80)
         selected_ids = mmr_select_chunk_ids(
             query=q,
             retrieved=retrieved,
             chunk_map=chunk_map,
             retriever=retriever,
-            stage1_k=50,
-            out_k=8,
+            stage1_k=32,
+            out_k=6,
             mmr_lambda=0.75,
         )
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
