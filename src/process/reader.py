@@ -137,7 +137,11 @@ class QwenReader:
             trust_remote_code=True,
         )
 
-        self.model = AutoModelForCausalLM.from_pretrained(self.cfg.model_name, **model_kwargs)
+        # Some GPTQ backends (e.g., marlin post-init) do in-place tensor transforms.
+        # Loading under no_grad avoids autograd leaf in-place errors.
+        with torch.no_grad():
+            self.model = AutoModelForCausalLM.from_pretrained(self.cfg.model_name, **model_kwargs)
+        self.model.requires_grad_(False)
         self.model.eval()
 
     def build_prompt(self, question: str, contexts: List[Dict[str, Any]]) -> str:
