@@ -175,6 +175,7 @@ class QwenReader:
         self.cfg = cfg
         self.tokenizer = None
         self.model = None
+        self._rerank_yes_no_ids: Optional[Tuple[int, int]] = None
 
     def _resolve_quant_backend(self) -> str:
         backend = (self.cfg.quant_backend or "auto").strip().lower()
@@ -216,6 +217,8 @@ class QwenReader:
             use_fast=True,
             trust_remote_code=True,
         )
+        if self.tokenizer.pad_token_id is None and self.tokenizer.eos_token_id is not None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
         # Some GPTQ backends (e.g., marlin post-init) do in-place tensor transforms.
         # Loading under no_grad avoids autograd leaf in-place errors.
@@ -223,6 +226,96 @@ class QwenReader:
             self.model = AutoModelForCausalLM.from_pretrained(self.cfg.model_name, **model_kwargs)
         self.model.requires_grad_(False)
         self.model.eval()
+
+    def _get_yes_no_token_ids(self) -> Tuple[int, int]:
+        if self._rerank_yes_no_ids is not None:
+            return self._rerank_yes_no_ids
+        assert self.tokenizer is not None
+
+        def _first_token_id(text_variants: List[str]) -> int:
+            for t in text_variants:
+                ids = self.tokenizer.encode(t, add_special_tokens=False)
+                if ids:
+                    return int(ids[0])
+            raise RuntimeError(f"Could not get token id for variants: {text_variants}")
+
+        yes_id = _first_token_id([" yes", "Yes", "yes"])
+        no_id = _first_token_id([" no", "No", "no"])
+        self._rerank_yes_no_ids = (yes_id, no_id)
+        return self._rerank_yes_no_ids
+
+    def _build_rerank_prompt(self, question: str, chunk: Dict[str, Any], max_chunk_chars: int = 1000) -> str:
+        assert self.tokenizer is not None
+        title = (chunk.get("title") or "").strip()
+        heading = (chunk.get("section_heading") or "").strip()
+        text = (chunk.get("text") or "").strip()[:max_chunk_chars]
+
+        meta = []
+        if title:
+            meta.append(f"Title: {title}")
+        if heading:
+            meta.append(f"Section: {heading}")
+        meta_text = " | ".join(meta)
+        passage = f"{meta_text}\n{text}".strip() if meta_text else text
+
+        system = (
+            "You are a passage reranker for retrieval.\n"
+            "Decide whether the passage is useful to answer the question.\n"
+            "Output only one token: yes or no.\n"
+        )
+        user = (
+            f"Question: {question}\n\n"
+            f"Passage:\n{passage}\n\n"
+            "Is this passage useful for answering the question? Answer:"
+        )
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        return self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+    @torch.inference_mode()
+    def rerank_chunks(
+        self,
+        question: str,
+        chunks: List[Dict[str, Any]],
+        *,
+        batch_size: int = 6,
+        max_chunk_chars: int = 1000,
+    ) -> List[float]:
+        if self.model is None or self.tokenizer is None:
+            raise RuntimeError("Reader not loaded. Call load().")
+        if not chunks:
+            return []
+
+        yes_id, no_id = self._get_yes_no_token_ids()
+        prompts = [self._build_rerank_prompt(question, c, max_chunk_chars=max_chunk_chars) for c in chunks]
+        scores: List[float] = []
+
+        for i in range(0, len(prompts), max(1, batch_size)):
+            batch_prompts = prompts[i: i + batch_size]
+            inputs = self.tokenizer(
+                batch_prompts,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=max(512, min(self.cfg.max_context_tokens, 2048)),
+                add_special_tokens=False,
+            )
+            inputs = {k: v.to(self.model.device) for k, v in inputs.items()}
+
+            out = self.model(**inputs, use_cache=False)
+            logits = out.logits
+            last_pos = inputs["attention_mask"].sum(dim=1) - 1
+            row_ids = torch.arange(logits.size(0), device=logits.device)
+            step_logits = logits[row_ids, last_pos, :]
+
+            yes_scores = step_logits[:, yes_id]
+            no_scores = step_logits[:, no_id]
+            batch_scores = (yes_scores - no_scores).detach().float().cpu().tolist()
+            scores.extend(batch_scores)
+
+        return [float(s) for s in scores]
 
     def build_prompt(self, question: str, contexts: List[Dict[str, Any]]) -> str:
         ctx_blocks = "\n\n".join(_format_context_chunk(i + 1, c) for i, c in enumerate(contexts))

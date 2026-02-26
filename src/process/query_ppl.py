@@ -149,6 +149,20 @@ def _chunk_temporal_score(chunk: Dict[str, Any], query_signals: Dict[str, Any]) 
         score += 0.1
     return score
 
+def _retrieval_confidence(retrieved: List[tuple[str, float]]) -> float:
+    if not retrieved:
+        return 0.0
+    scores = np.array([float(sc) for _cid, sc in retrieved[: min(12, len(retrieved))]], dtype=np.float32)
+    if scores.size == 1:
+        return 0.0
+    sn = _minmax(scores)
+    top = float(sn[0])
+    second = float(sn[1]) if len(sn) > 1 else 0.0
+    gap = max(0.0, top - second)
+    tail = float(sn[2:6].mean()) if len(sn) > 2 else second
+    conf = 0.55 * gap + 0.25 * top + 0.20 * max(0.0, top - tail)
+    return float(min(max(conf, 0.0), 1.0))
+
 
 def mmr_select_chunk_ids(
     *,
@@ -223,10 +237,22 @@ def main():
     ap.add_argument("--dense_dir", default="indexes/dense_gte-Qwen2-1.5B-instruct")
 
     ap.add_argument("--k_retrieve", type=int, default=80, help="Initial candidate count from hybrid retriever")
+    ap.add_argument("--adaptive_retrieval", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--retrieval_conf_threshold", type=float, default=0.18,
+                    help="If confidence is below this, trigger deeper fallback retrieval")
+    ap.add_argument("--low_conf_k_retrieve", type=int, default=160,
+                    help="Fallback retrieval depth when confidence is low")
+    ap.add_argument("--low_conf_stage1_k", type=int, default=56,
+                    help="Fallback rerank candidate depth when confidence is low")
     ap.add_argument("--k_ctx", type=int, default=6, help="How many chunks to pass to reader")
     ap.add_argument("--stage1_k", type=int, default=32, help="Top candidates considered by MMR reranker")
     ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
     ap.add_argument("--temporal_boost_weight", type=float, default=0.12, help="Weight for date/event metadata boost")
+    ap.add_argument("--reader_rerank", action=argparse.BooleanOptionalAction, default=True,
+                    help="Use reader as a final reranker over MMR-selected candidates")
+    ap.add_argument("--rerank_pool_k", type=int, default=18, help="Candidate pool size for reader reranking")
+    ap.add_argument("--rerank_batch_size", type=int, default=6)
+    ap.add_argument("--rerank_max_chunk_chars", type=int, default=1000)
     ap.add_argument("--dedup_doc", action=argparse.BooleanOptionalAction, default=True,
                     help="Deduplicate context chunks by doc_id")
 
@@ -311,24 +337,59 @@ def main():
             continue
 
         retrieved = retriever.retrieve(q, k=args.k_retrieve)
-        ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]
+        conf = _retrieval_confidence(retrieved)
+        stage1_k = args.stage1_k
+
+        if args.adaptive_retrieval and conf < args.retrieval_conf_threshold:
+            retrieved = retriever.retrieve(q, k=max(args.low_conf_k_retrieve, args.k_retrieve))
+            stage1_k = max(stage1_k, args.low_conf_stage1_k)
 
         selected_ids = mmr_select_chunk_ids(
             query=q,
             retrieved=retrieved,
             chunk_map=chunk_map,
             retriever=retriever,
-            stage1_k=args.stage1_k,
-            out_k=args.k_ctx,
+            stage1_k=stage1_k,
+            out_k=max(args.k_ctx, args.rerank_pool_k if args.reader_rerank else args.k_ctx),
             mmr_lambda=args.mmr_lambda,
             temporal_boost_weight=args.temporal_boost_weight,
         )
+
+        if args.reader_rerank:
+            pool_ids = selected_ids[: max(args.k_ctx, args.rerank_pool_k)]
+            pool_pairs = [(cid, chunk_map[cid]) for cid in pool_ids if cid in chunk_map]
+            pool_chunks = [c for _cid, c in pool_pairs]
+            if pool_chunks:
+                rerank_scores = reader.rerank_chunks(
+                    q,
+                    pool_chunks,
+                    batch_size=args.rerank_batch_size,
+                    max_chunk_chars=args.rerank_max_chunk_chars,
+                )
+                reranked = sorted(
+                    zip([cid for cid, _ in pool_pairs], rerank_scores),
+                    key=lambda x: (x[1], x[0]),
+                    reverse=True,
+                )
+                selected_ids = [cid for cid, _ in reranked]
+
         ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
 
         if args.dedup_doc:
             ctx = dedup_by_doc_id(ctx, args.k_ctx)
         else:
             ctx = ctx[:args.k_ctx]
+
+        if len(ctx) < args.k_ctx:
+            seen = {c.get("chunk_id") for c in ctx if c.get("chunk_id")}
+            for cid, _sc in retrieved:
+                if cid in chunk_map and cid not in seen:
+                    ctx.append(chunk_map[cid])
+                    seen.add(cid)
+                    if args.dedup_doc:
+                        ctx = dedup_by_doc_id(ctx, args.k_ctx)
+                    if len(ctx) >= args.k_ctx:
+                        break
 
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()
