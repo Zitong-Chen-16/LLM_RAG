@@ -234,6 +234,14 @@ def main():
     ap.add_argument("--w_sparse", type=float, default=0.4)
     ap.add_argument("--k_dense", type=int, default=200)
     ap.add_argument("--k_sparse", type=int, default=200)
+    ap.add_argument("--sparse_title_weight", type=int, default=3)
+    ap.add_argument("--sparse_heading_weight", type=int, default=2)
+    ap.add_argument("--sparse_body_weight", type=int, default=1)
+    ap.add_argument("--sparse_add_bigrams", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--sparse_prf", action=argparse.BooleanOptionalAction, default=True)
+    ap.add_argument("--sparse_prf_k", type=int, default=8)
+    ap.add_argument("--sparse_prf_terms", type=int, default=6)
+    ap.add_argument("--sparse_prf_alpha", type=float, default=0.65)
     ap.add_argument("--fusion_method", choices=["rrf", "minmax"], default="rrf")
     ap.add_argument("--rrf_k", type=int, default=60)
     ap.add_argument("--embed_model", default="Alibaba-NLP/gte-Qwen2-1.5B-instruct")
@@ -271,6 +279,14 @@ def main():
         device=args.device,
         model_name=args.embed_model,
         quant_backend=args.embed_quant_backend,
+        sparse_title_weight=args.sparse_title_weight,
+        sparse_heading_weight=args.sparse_heading_weight,
+        sparse_body_weight=args.sparse_body_weight,
+        sparse_add_bigrams=args.sparse_add_bigrams,
+        sparse_prf=args.sparse_prf,
+        sparse_prf_k=args.sparse_prf_k,
+        sparse_prf_terms=args.sparse_prf_terms,
+        sparse_prf_alpha=args.sparse_prf_alpha,
         fusion_method=args.fusion_method,
         rrf_k=args.rrf_k,
     )

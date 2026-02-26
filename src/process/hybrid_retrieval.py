@@ -76,10 +76,29 @@ def build_default_hybrid(
     device: str = "cuda",
     model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
     quant_backend: str = "none",
+    sparse_title_weight: int = 3,
+    sparse_heading_weight: int = 2,
+    sparse_body_weight: int = 1,
+    sparse_add_bigrams: bool = True,
+    sparse_prf: bool = True,
+    sparse_prf_k: int = 8,
+    sparse_prf_terms: int = 6,
+    sparse_prf_alpha: float = 0.65,
     fusion_method: str = "rrf",
     rrf_k: int = 60,
 ) -> HybridRetriever:
-    sparse = SparseRetriever(index_dir=bm25_dir, chunks_path=chunks_path)
+    sparse = SparseRetriever(
+        index_dir=bm25_dir,
+        chunks_path=chunks_path,
+        title_weight=sparse_title_weight,
+        heading_weight=sparse_heading_weight,
+        body_weight=sparse_body_weight,
+        add_bigrams=sparse_add_bigrams,
+        enable_prf=sparse_prf,
+        prf_k=sparse_prf_k,
+        prf_terms=sparse_prf_terms,
+        prf_alpha=sparse_prf_alpha,
+    )
     sparse.load()
 
     dense = DenseRetriever(index_dir=dense_dir, 
