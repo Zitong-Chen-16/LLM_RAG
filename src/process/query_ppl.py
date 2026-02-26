@@ -60,9 +60,9 @@ def mmr_select_chunk_ids(
     fused_n = _minmax(fused_scores)
 
     dense = retriever.dense
-    q_emb = dense.encode_texts([query], batch_size=1)[0]
+    q_emb = dense.encode_queries([query], batch_size=1)[0]
     doc_texts = [build_embed_text(chunk_map[cid]) for cid in cand_ids]
-    doc_emb = dense.encode_texts(doc_texts, batch_size=min(len(doc_texts), 64))
+    doc_emb = dense.encode_documents(doc_texts, batch_size=min(len(doc_texts), 64))
     dense_rel = (doc_emb @ q_emb).astype(np.float32)
     dense_rel_n = _minmax(dense_rel)
 

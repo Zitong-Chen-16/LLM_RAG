@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict, Any
 
 import numpy as np
 import faiss 
@@ -40,12 +40,24 @@ class DenseRetriever:
     batch_size: int = 8
     normalize: bool = True
     quant_backend: str = "none"  # none | 8bit | 4bit
+    query_instruction: Optional[str] = None
 
     def __post_init__(self):
         self.index_dir = Path(self.index_dir)
         self._model: Optional[SentenceTransformer] = None
         self._index = None
         self._chunk_ids: List[str] = []
+
+    def _default_query_instruction(self) -> Optional[str]:
+        name = (self.model_name or "").lower()
+        if "gte-qwen2" in name and "instruct" in name:
+            return "Given a web search query, retrieve relevant passages that answer the query"
+        return None
+
+    def _get_query_instruction(self) -> Optional[str]:
+        if self.query_instruction and self.query_instruction.strip():
+            return self.query_instruction.strip()
+        return self._default_query_instruction()
 
     def _load_model(self) -> SentenceTransformer:
         if self._model is None:
@@ -102,14 +114,7 @@ class DenseRetriever:
         self._chunk_ids = [c["chunk_id"] for c in chunks]
         texts = [build_embed_text(c) for c in chunks]
 
-        model = self._load_model()
-        emb = model.encode(
-            texts,
-            batch_size=self.batch_size,
-            convert_to_numpy=True,
-            show_progress_bar=True,
-            normalize_embeddings=False,
-        ).astype(np.float32)
+        emb = self.encode_documents(texts, batch_size=self.batch_size, show_progress_bar=True)
 
         if self.normalize:
             emb = l2_normalize(emb)
@@ -159,21 +164,99 @@ class DenseRetriever:
                     f"but retriever configured with '{self.model_name}'. Rebuild the index or use matching model."
                 )
 
-    def encode_texts(self, texts: List[str], batch_size: Optional[int] = None) -> np.ndarray:
+    def _encode_raw(
+        self,
+        texts: List[str],
+        *,
+        batch_size: Optional[int] = None,
+        show_progress_bar: bool = False,
+        extra_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> np.ndarray:
         model = self._load_model()
+        kwargs = dict(extra_kwargs or {})
         emb = model.encode(
             texts,
             batch_size=batch_size or self.batch_size,
             convert_to_numpy=True,
-            show_progress_bar=False,
+            show_progress_bar=show_progress_bar,
             normalize_embeddings=False,
+            **kwargs,
         ).astype(np.float32)
         if self.normalize:
             emb = l2_normalize(emb)
         return emb
 
+    def encode_documents(
+        self,
+        texts: List[str],
+        *,
+        batch_size: Optional[int] = None,
+        show_progress_bar: bool = False,
+    ) -> np.ndarray:
+        # Documents should be encoded without query instructions/prompts.
+        return self._encode_raw(
+            texts,
+            batch_size=batch_size,
+            show_progress_bar=show_progress_bar,
+            extra_kwargs=None,
+        )
+
+    def encode_queries(
+        self,
+        queries: List[str],
+        *,
+        batch_size: Optional[int] = None,
+        show_progress_bar: bool = False,
+    ) -> np.ndarray:
+        instruction = self._get_query_instruction()
+        model = self._load_model()
+
+        # Preferred path for instruction-tuned embedders with built-in prompts.
+        prompts = getattr(model, "prompts", None)
+        if isinstance(prompts, dict) and "query" in prompts:
+            try:
+                return self._encode_raw(
+                    queries,
+                    batch_size=batch_size,
+                    show_progress_bar=show_progress_bar,
+                    extra_kwargs={"prompt_name": "query"},
+                )
+            except Exception:
+                pass
+
+        if instruction:
+            # Fallback to explicit prompt prefix.
+            prompt_prefix = f"Instruct: {instruction}\nQuery: "
+            try:
+                return self._encode_raw(
+                    queries,
+                    batch_size=batch_size,
+                    show_progress_bar=show_progress_bar,
+                    extra_kwargs={"prompt": prompt_prefix},
+                )
+            except TypeError:
+                # Older sentence-transformers versions may not support `prompt=`.
+                formatted = [f"{prompt_prefix}{q}" for q in queries]
+                return self._encode_raw(
+                    formatted,
+                    batch_size=batch_size,
+                    show_progress_bar=show_progress_bar,
+                    extra_kwargs=None,
+                )
+
+        return self._encode_raw(
+            queries,
+            batch_size=batch_size,
+            show_progress_bar=show_progress_bar,
+            extra_kwargs=None,
+        )
+
+    def encode_texts(self, texts: List[str], batch_size: Optional[int] = None) -> np.ndarray:
+        # Backward-compatible alias: treat this as document encoding.
+        return self.encode_documents(texts, batch_size=batch_size, show_progress_bar=False)
+
     def retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
-        q = self.encode_texts([query], batch_size=1)
+        q = self.encode_queries([query], batch_size=1)
 
         scores, idxs = self._index.search(q, k)
         scores = scores[0].tolist()
