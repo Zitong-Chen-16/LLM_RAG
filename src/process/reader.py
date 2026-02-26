@@ -9,6 +9,7 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     BitsAndBytesConfig,
+    GPTQConfig,
 )
 
 from hybrid_retrieval import build_default_hybrid
@@ -125,6 +126,9 @@ class QwenReader:
             model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
         elif backend == "gptq":
             # GPTQ models provide their own quantization config in model files.
+            quant = GPTQConfig(
+                bits=4
+            )
             model_kwargs["torch_dtype"] = "auto"
         elif backend == "none":
             model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
@@ -145,8 +149,9 @@ class QwenReader:
 
         system = (
             "You are a question answering system.\n"
-            "Answer the question based on the provided context.\n"
+            "Answer the question based on the provided context and your knowledge.\n"
             "Output ONLY the answer (no explanations).\n"
+            "Do not specify if the answer comes from context or is based on your own knowledge.\n"
             "Keep your answer concise.\n"
             "Answer in English ONLY.\n"
         )
