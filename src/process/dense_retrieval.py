@@ -5,7 +5,9 @@ from typing import List, Tuple, Optional
 
 import numpy as np
 import faiss 
+import torch
 from sentence_transformers import SentenceTransformer
+from transformers import BitsAndBytesConfig, AutoConfig
 
 from utils import iter_jsonl, load_chunk_text_map
 
@@ -37,6 +39,7 @@ class DenseRetriever:
     device: str = "cuda"
     batch_size: int = 256
     normalize: bool = True
+    quant_backend: str = "none"  # none | 8bit | 4bit
 
     def __post_init__(self):
         self.index_dir = Path(self.index_dir)
@@ -46,7 +49,42 @@ class DenseRetriever:
 
     def _load_model(self) -> SentenceTransformer:
         if self._model is None:
-            self._model = SentenceTransformer(self.model_name, device=self.device)
+            backend = (self.quant_backend or "none").strip().lower()
+            cfg = AutoConfig.from_pretrained(self.model_name, trust_remote_code=True)
+            # Compatibility fallback for older transformers/Qwen2 config variants.
+            st_kwargs = {"trust_remote_code": True}
+            if getattr(cfg, "model_type", "") == "qwen2" and not hasattr(cfg, "rope_theta"):
+                st_kwargs["config_kwargs"] = {"rope_theta": 1000000.0}
+
+            if backend == "none":
+                self._model = SentenceTransformer(
+                    self.model_name,
+                    device=self.device,
+                    **st_kwargs,
+                )
+            elif backend in {"8bit", "4bit"}:
+                if backend == "8bit":
+                    quant_config = BitsAndBytesConfig(load_in_8bit=True)
+                else:
+                    quant_config = BitsAndBytesConfig(
+                        load_in_4bit=True,
+                        bnb_4bit_quant_type="nf4",
+                        bnb_4bit_use_double_quant=True,
+                        bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
+                    )
+                self._model = SentenceTransformer(
+                    self.model_name,
+                    device=None,
+                    **st_kwargs,
+                    model_kwargs={
+                        "quantization_config": quant_config,
+                        "device_map": {"": self.device},
+                        "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float16,
+                    },
+                )
+            else:
+                raise ValueError(f"Unsupported quant_backend='{self.quant_backend}'. Use none|8bit|4bit.")
+
         return self._model
 
     def build(self, save_embeddings: bool = False) -> None:
@@ -83,6 +121,7 @@ class DenseRetriever:
                     "device": self.device,
                     "batch_size": self.batch_size,
                     "normalize": self.normalize,
+                    "quant_backend": self.quant_backend,
                     "dim": int(d),
                     "num_chunks": int(len(self._chunk_ids)),
                 },
@@ -143,11 +182,12 @@ if __name__ == "__main__":
         r = DenseRetriever(
             index_dir=Path("indexes/dense"),
             chunks_path=Path("data/processed/chunks.jsonl"),
-            model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
             device="cuda:1",
-            batch_size=16,
+            batch_size=1,
             normalize=True,
-        )
+            quant_backend="8bit"
+            )
         r.build(save_embeddings=False)
         print("Dense FAISS index built at indexes/dense")
 

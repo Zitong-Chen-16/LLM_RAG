@@ -75,6 +75,7 @@ def build_default_hybrid(
     k_sparse: int = 100,
     device: str = "cuda",
     model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+    quant_backend: str = "none",
     fusion_method: str = "rrf",
     rrf_k: int = 60,
 ) -> HybridRetriever:
@@ -84,7 +85,8 @@ def build_default_hybrid(
     dense = DenseRetriever(index_dir=dense_dir, 
                            chunks_path=chunks_path, 
                            device=device,
-                            model_name=model_name)
+                           model_name=model_name,
+                           quant_backend=quant_backend)
     dense.load()
 
     return HybridRetriever(

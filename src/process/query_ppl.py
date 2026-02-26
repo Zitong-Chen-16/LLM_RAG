@@ -103,9 +103,9 @@ def main():
 
     ap.add_argument("--k_retrieve", type=int, default=20, help="Initial candidate count from hybrid retriever")
     ap.add_argument("--k_ctx", type=int, default=20, help="How many chunks to pass to reader")
-    # ap.add_argument("--stage1_k", type=int, default=20, help="Top candidates considered by MMR reranker")
-    # ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
-    # ap.add_argument("--dedup_doc", action="store_true", help="Deduplicate context chunks by doc_id")
+    ap.add_argument("--stage1_k", type=int, default=20, help="Top candidates considered by MMR reranker")
+    ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
+    ap.add_argument("--dedup_doc", action="store_true", help="Deduplicate context chunks by doc_id")
 
     ap.add_argument("--w_dense", type=float, default=0.6)
     ap.add_argument("--w_sparse", type=float, default=0.4)
@@ -114,6 +114,7 @@ def main():
     ap.add_argument("--fusion_method", choices=["rrf", "minmax"], default="rrf")
     ap.add_argument("--rrf_k", type=int, default=60)
     ap.add_argument("--embed_model", default="Alibaba-NLP/gte-Qwen2-1.5B-instruct")
+    ap.add_argument("--embed_quant_backend", choices=["none", "8bit", "4bit"], default="none")
 
     ap.add_argument("--model", default="Qwen/Qwen2.5-14B-Instruct")
     ap.add_argument("--reader_device", type=str, default="cuda:0", help="Reader device: auto / cuda:0 / cuda:1")
@@ -146,6 +147,7 @@ def main():
         k_sparse=args.k_sparse,
         device=args.device,
         model_name=args.embed_model,
+        quant_backend=args.embed_quant_backend,
         fusion_method=args.fusion_method,
         rrf_k=args.rrf_k,
     )
@@ -170,30 +172,23 @@ def main():
             continue
 
         retrieved = retriever.retrieve(q, k=args.k_retrieve)
-        # selected_ids = mmr_select_chunk_ids(
-        #     query=q,
-        #     retrieved=retrieved,
-        #     chunk_map=chunk_map,
-        #     retriever=retriever,
-        #     stage1_k=args.stage1_k,
-        #     out_k=args.k_ctx,
-        #     mmr_lambda=args.mmr_lambda,
-        # )
-        # ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
         ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]
-        # if len(ctx) < args.k_ctx:
-        #     seen_ids = set(selected_ids)
-        #     for cid, _sc in retrieved:
-        #         if cid in chunk_map and cid not in seen_ids:
-        #             ctx.append(chunk_map[cid])
-        #             seen_ids.add(cid)
-        #             if len(ctx) >= args.k_ctx:
-        #                 break
 
-        # if args.dedup_doc:
-        #     ctx = dedup_by_doc_id(ctx, args.k_ctx)
-        # else:
-        #     ctx = ctx[:args.k_ctx]
+        selected_ids = mmr_select_chunk_ids(
+            query=q,
+            retrieved=retrieved,
+            chunk_map=chunk_map,
+            retriever=retriever,
+            stage1_k=args.stage1_k,
+            out_k=args.k_ctx,
+            mmr_lambda=args.mmr_lambda,
+        )
+        ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
+
+        if args.dedup_doc:
+            ctx = dedup_by_doc_id(ctx, args.k_ctx)
+        else:
+            ctx = ctx[:args.k_ctx]
 
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()

@@ -10,9 +10,89 @@ from transformers import (
     AutoModelForCausalLM,
     BitsAndBytesConfig,
 )
+import numpy as np
 
 from hybrid_retrieval import build_default_hybrid
 from utils import load_chunk_text_map
+from dense_retrieval import build_embed_text
+
+#### functions from query_ppl.py that are shared with reader.py, can be refactored to utils.py if needed. ####
+def dedup_by_doc_id(chunks: List[Dict[str, Any]], k: int) -> List[Dict[str, Any]]:
+    out = []
+    seen = set()
+    for c in chunks:
+        doc_id = c.get("doc_id")
+        if doc_id and doc_id in seen:
+            continue
+        if doc_id:
+            seen.add(doc_id)
+        out.append(c)
+        if len(out) >= k:
+            break
+    return out
+
+
+def _minmax(arr: np.ndarray) -> np.ndarray:
+    if arr.size == 0:
+        return arr
+    mn = float(arr.min())
+    mx = float(arr.max())
+    if mx - mn < 1e-12:
+        return np.zeros_like(arr, dtype=np.float32)
+    return ((arr - mn) / (mx - mn)).astype(np.float32)
+
+
+def mmr_select_chunk_ids(
+    *,
+    query: str,
+    retrieved: List[tuple[str, float]],
+    chunk_map: Dict[str, Dict[str, Any]],
+    retriever,
+    stage1_k: int,
+    out_k: int,
+    mmr_lambda: float,
+) -> List[str]:
+    cands = [(cid, float(sc)) for cid, sc in retrieved if cid in chunk_map][:stage1_k]
+    if not cands:
+        return []
+
+    cand_ids = [cid for cid, _ in cands]
+    fused_scores = np.array([sc for _cid, sc in cands], dtype=np.float32)
+    fused_n = _minmax(fused_scores)
+
+    dense = retriever.dense
+    q_emb = dense.encode_texts([query], batch_size=1)[0]
+    doc_texts = [build_embed_text(chunk_map[cid]) for cid in cand_ids]
+    doc_emb = dense.encode_texts(doc_texts, batch_size=min(len(doc_texts), 64))
+    dense_rel = (doc_emb @ q_emb).astype(np.float32)
+    dense_rel_n = _minmax(dense_rel)
+
+    # Blend dense relevance with hybrid prior, then enforce diversity with MMR.
+    rel = (0.8 * dense_rel_n + 0.2 * fused_n).astype(np.float32)
+
+    selected: List[int] = []
+    remaining = set(range(len(cand_ids)))
+    while remaining and len(selected) < out_k:
+        if not selected:
+            best = max(remaining, key=lambda i: float(rel[i]))
+            selected.append(best)
+            remaining.remove(best)
+            continue
+
+        best = None
+        best_score = None
+        for i in remaining:
+            max_sim = max(float(doc_emb[i] @ doc_emb[j]) for j in selected)
+            score = float(mmr_lambda * rel[i] - (1.0 - mmr_lambda) * max_sim)
+            if best is None or score > best_score:
+                best = i
+                best_score = score
+
+        selected.append(best)
+        remaining.remove(best)
+
+    return [cand_ids[i] for i in selected]
+########
 
 def _clean_answer(s: str) -> str:
     s = (s or "").strip()
@@ -149,10 +229,10 @@ class QwenReader:
 
         system = (
             "You are a question answering system.\n"
-            "Answer the question based on the provided context and your knowledge.\n"
+            "Answer the question based on the provided context.\n"
             "Output ONLY the answer (no explanations).\n"
+            "KEEP YOUR ANSWER CONCISE AND NO MORE THAN ONE SENTENCE.\n"
             "Do not specify if the answer comes from context or is based on your own knowledge.\n"
-            "Keep your answer concise.\n"
             "Answer in English ONLY.\n"
         )
         user = f"Context:\n{ctx_blocks}\n\nQuestion: {question}\nAnswer:"
@@ -237,6 +317,7 @@ class QwenReader:
         return ans, used_chunk_ids
 
 if __name__ == "__main__":
+    
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
 
@@ -259,7 +340,7 @@ if __name__ == "__main__":
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
         device_map={"": "cuda:1"},
         quant_backend="gptq",
-        max_context_tokens=3000,
+        max_context_tokens=24000,
         max_new_tokens=48,
         temperature=0,
         top_p=1,
@@ -276,9 +357,29 @@ if __name__ == "__main__":
     ]
 
     for q in queries:
-        retrieved = retriever.retrieve(q, k=20)
+        retrieved = retriever.retrieve(q, k=50)
+        selected_ids = mmr_select_chunk_ids(
+            query=q,
+            retrieved=retrieved,
+            chunk_map=chunk_map,
+            retriever=retriever,
+            stage1_k=50,
+            out_k=10,
+            mmr_lambda=0.75,
+        )
+        ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
+        if len(ctx) < 6:
+            seen_ids = set(selected_ids)
+            for cid, _sc in retrieved:
+                if cid in chunk_map and cid not in seen_ids:
+                    ctx.append(chunk_map[cid])
+                    seen_ids.add(cid)
+                    if len(ctx) >= 6:
+                        break
+        dedup_doc = False
+        if dedup_doc:
+            ctx = dedup_by_doc_id(ctx, 6)
         ctx = [chunk_map[cid] for cid, _ in retrieved if cid in chunk_map]  # k_ctx=6
-        print(len(ctx), "chunks retrieved for question:", q)
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()
 
