@@ -9,7 +9,6 @@ from transformers import (
     AutoTokenizer,
     AutoModelForCausalLM,
     BitsAndBytesConfig,
-    GPTQConfig,
 )
 
 from hybrid_retrieval import build_default_hybrid
@@ -116,19 +115,16 @@ class QwenReader:
         }
 
         if backend == "bnb":
-            quant = BitsAndBytesConfig(
+            bnb_quant = BitsAndBytesConfig(
                 load_in_4bit=True,
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_use_double_quant=True,
                 bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
             )
-            model_kwargs["quantization_config"] = quant
+            model_kwargs["quantization_config"] = bnb_quant
             model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
         elif backend == "gptq":
             # GPTQ models provide their own quantization config in model files.
-            quant = GPTQConfig(
-                bits=4
-            )
             model_kwargs["torch_dtype"] = "auto"
         elif backend == "none":
             model_kwargs["torch_dtype"] = torch.bfloat16 if torch.cuda.is_available() else torch.float16
