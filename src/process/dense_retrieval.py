@@ -50,40 +50,50 @@ class DenseRetriever:
     def _load_model(self) -> SentenceTransformer:
         if self._model is None:
             backend = (self.quant_backend or "none").strip().lower()
-            cfg = AutoConfig.from_pretrained(self.model_name, trust_remote_code=True)
-            # Compatibility fallback for older transformers/Qwen2 config variants.
-            st_kwargs = {"trust_remote_code": True}
-            if getattr(cfg, "model_type", "") == "qwen2" and not hasattr(cfg, "rope_theta"):
-                st_kwargs["config_kwargs"] = {"rope_theta": 1000000.0}
+            try:
+                cfg = AutoConfig.from_pretrained(self.model_name, trust_remote_code=True)
+            except Exception:
+                cfg = None
 
-            if backend == "none":
-                self._model = SentenceTransformer(
-                    self.model_name,
-                    device=self.device,
-                    **st_kwargs,
-                )
-            elif backend in {"8bit", "4bit"}:
-                if backend == "8bit":
-                    quant_config = BitsAndBytesConfig(load_in_8bit=True)
-                else:
-                    quant_config = BitsAndBytesConfig(
-                        load_in_4bit=True,
-                        bnb_4bit_quant_type="nf4",
-                        bnb_4bit_use_double_quant=True,
-                        bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
+            def build_model(trust_remote_code: bool) -> SentenceTransformer:
+                st_kwargs = {"trust_remote_code": trust_remote_code}
+                if cfg is not None and getattr(cfg, "model_type", "") == "qwen2" and not hasattr(cfg, "rope_theta"):
+                    st_kwargs["config_kwargs"] = {"rope_theta": 1000000.0}
+
+                if backend == "none":
+                    return SentenceTransformer(
+                        self.model_name,
+                        device=self.device,
+                        **st_kwargs,
                     )
-                self._model = SentenceTransformer(
-                    self.model_name,
-                    device=None,
-                    **st_kwargs,
-                    model_kwargs={
-                        "quantization_config": quant_config,
-                        "device_map": {"": self.device},
-                        "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float16,
-                    },
-                )
-            else:
+                if backend in {"8bit", "4bit"}:
+                    if backend == "8bit":
+                        quant_config = BitsAndBytesConfig(load_in_8bit=True)
+                    else:
+                        quant_config = BitsAndBytesConfig(
+                            load_in_4bit=True,
+                            bnb_4bit_quant_type="nf4",
+                            bnb_4bit_use_double_quant=True,
+                            bnb_4bit_compute_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float16,
+                        )
+                    return SentenceTransformer(
+                        self.model_name,
+                        device=None,
+                        **st_kwargs,
+                        model_kwargs={
+                            "quantization_config": quant_config,
+                            "device_map": {"": self.device},
+                            "torch_dtype": torch.bfloat16 if torch.cuda.is_available() else torch.float16,
+                        },
+                    )
                 raise ValueError(f"Unsupported quant_backend='{self.quant_backend}'. Use none|8bit|4bit.")
+
+            try:
+                self._model = build_model(trust_remote_code=True)
+            except AttributeError as e:
+                if "rope_theta" not in str(e):
+                    raise
+                self._model = build_model(trust_remote_code=False)
 
         return self._model
 
