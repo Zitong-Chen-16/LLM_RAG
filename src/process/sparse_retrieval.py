@@ -222,7 +222,7 @@ if __name__ == "__main__":
     low_conf_k_retrieve = 160
     retrieval_conf_threshold = 0.18
 
-    bm25_dir = Path("indexes/bm25")
+    bm25_dir = Path("indexes/bm25_37763")
     if not (bm25_dir / "bm25").exists():
         retriever = SparseRetriever(
             index_dir=bm25_dir,
@@ -238,7 +238,7 @@ if __name__ == "__main__":
         retriever.build()
         print("BM25 index built at indexes/bm25")
 
-    chunks_path = Path("data/processed/chunks.jsonl")
+    chunks_path = Path("data/processed/chunks_80M.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
     r = SparseRetriever(
         index_dir=bm25_dir,

@@ -298,13 +298,13 @@ if __name__ == "__main__":
     low_conf_k_retrieve = 160
     retrieval_conf_threshold = 0.18
 
-    index_dir = Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2")
+    index_dir = Path("indexes/dense_gte-Qwen2-7B-instruct_v2")
     chunks_path = Path("data/processed/chunks.jsonl")
     if not (index_dir / "faiss.index").exists():
         r_build = DenseRetriever(
             index_dir=index_dir,
             chunks_path=chunks_path,
-            model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+            model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
             device="cuda:1",
             batch_size=16,
             normalize=True,
@@ -317,7 +317,7 @@ if __name__ == "__main__":
     r = DenseRetriever(
         index_dir=index_dir,
         chunks_path=chunks_path,
-        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+        model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
         device="cuda:1",
         batch_size=8,
         normalize=True,

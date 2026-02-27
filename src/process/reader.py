@@ -416,16 +416,16 @@ if __name__ == "__main__":
     chunk_map = load_chunk_text_map(chunks_path)
 
     retriever = build_default_hybrid(
-        bm25_dir=Path("indexes/bm25"),
-        dense_dir=Path("indexes/dense_gte-Qwen2-1.5B-instruct_v2"),
+        bm25_dir=Path("indexes/bm25_v3"),
+        dense_dir=Path("indexes/dense_gte-Qwen2-7B-instruct_v2"),
         chunks_path=chunks_path,
-        w_dense=0.6,
-        w_sparse=0.4,
+        w_dense=0.5,
+        w_sparse=0.5,
         k_dense=200,
         k_sparse=200,
         device="cuda:1",
-        model_name="Alibaba-NLP/gte-Qwen2-1.5B-instruct",
-        quant_backend="none",
+        model_name="Alibaba-NLP/gte-Qwen2-7B-instruct",
+        quant_backend="8bit",
         sparse_title_weight=3,
         sparse_heading_weight=2,
         sparse_body_weight=1,
@@ -443,8 +443,8 @@ if __name__ == "__main__":
         model_name= "Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4", #"Qwen/Qwen2.5-14B-Instruct",
         device_map={"": "cuda:0"},
         quant_backend="gptq",
-        max_context_tokens=3500,
-        max_new_tokens=48,
+        max_context_tokens=12000,
+        max_new_tokens=100,
         temperature=0,
         top_p=1,
     ))
@@ -460,18 +460,18 @@ if __name__ == "__main__":
     ]
 
     # Match query_ppl defaults.
-    k_retrieve = 80
-    stage1_k = 32
-    k_ctx = 6
+    k_retrieve = 100
+    stage1_k = 50
+    k_ctx = 20
     mmr_lambda = 0.75
     temporal_boost_weight = 0.12
     retrieval_conf_threshold = 0.18
     low_conf_k_retrieve = 160
-    low_conf_stage1_k = 56
+    low_conf_stage1_k = 75
     reader_rerank = True
     rerank_pool_k = 18
     rerank_batch_size = 6
-    rerank_max_chunk_chars = 1000
+    rerank_max_chunk_chars = 2000
     dedup_doc = True
 
     for q in queries:
