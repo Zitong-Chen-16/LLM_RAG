@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Dict, Any, List
 
-from hybrid_retrieval import build_default_hybrid
+from hybrid_retrieval import build_retriever
 from reader import QwenReader, ReaderConfig
 from utils import load_chunk_text_map
 from dense_retrieval import build_embed_text
@@ -183,15 +183,19 @@ def mmr_select_chunk_ids(
     fused_scores = np.array([sc for _cid, sc in cands], dtype=np.float32)
     fused_n = _minmax(fused_scores)
 
-    dense = retriever.dense
-    q_emb = dense.encode_queries([query], batch_size=1)[0]
-    doc_texts = [build_embed_text(chunk_map[cid]) for cid in cand_ids]
-    doc_emb = dense.encode_documents(doc_texts, batch_size=min(len(doc_texts), 64))
-    dense_rel = (doc_emb @ q_emb).astype(np.float32)
-    dense_rel_n = _minmax(dense_rel)
-
-    # Blend dense relevance with hybrid prior.
-    rel = (0.8 * dense_rel_n + 0.2 * fused_n).astype(np.float32)
+    dense = getattr(retriever, "dense", None)
+    doc_emb = None
+    if dense is not None:
+        q_emb = dense.encode_queries([query], batch_size=1)[0]
+        doc_texts = [build_embed_text(chunk_map[cid]) for cid in cand_ids]
+        doc_emb = dense.encode_documents(doc_texts, batch_size=min(len(doc_texts), 64))
+        dense_rel = (doc_emb @ q_emb).astype(np.float32)
+        dense_rel_n = _minmax(dense_rel)
+        # Blend dense relevance with retrieval prior.
+        rel = (0.8 * dense_rel_n + 0.2 * fused_n).astype(np.float32)
+    else:
+        # Sparse-only mode: no dense encoder available for semantic reranking.
+        rel = fused_n.astype(np.float32)
 
     # Optional temporal/event metadata boost for date-sensitive queries.
     query_signals = _extract_query_signals(query)
@@ -203,6 +207,15 @@ def mmr_select_chunk_ids(
         )
         temporal_n = _minmax(temporal_raw)
         rel = ((1.0 - temporal_weight) * rel + temporal_weight * temporal_n).astype(np.float32)
+
+    # Without dense document embeddings we cannot apply semantic diversity MMR.
+    if doc_emb is None:
+        ranked = sorted(
+            range(len(cand_ids)),
+            key=lambda i: (float(rel[i]), cand_ids[i]),
+            reverse=True,
+        )
+        return [cand_ids[i] for i in ranked[:out_k]]
 
     selected: List[int] = []
     remaining = set(range(len(cand_ids)))
@@ -235,6 +248,8 @@ def main():
     ap.add_argument("--chunks", default="data/processed/chunks.jsonl")
     ap.add_argument("--bm25_dir", default="indexes/bm25")
     ap.add_argument("--dense_dir", default="indexes/dense_gte-Qwen2-1.5B-instruct")
+    ap.add_argument("--retrieval_mode", choices=["hybrid", "dense", "sparse", "closed_book"], default="hybrid",
+                    help="Retriever configuration for context building.")
 
     ap.add_argument("--k_retrieve", type=int, default=80, help="Initial candidate count from hybrid retriever")
     ap.add_argument("--adaptive_retrieval", action=argparse.BooleanOptionalAction, default=True)
@@ -294,28 +309,31 @@ def main():
 
     chunk_map = load_chunk_text_map(chunks_path)
 
-    retriever = build_default_hybrid(
-        bm25_dir=Path(args.bm25_dir),
-        dense_dir=Path(args.dense_dir),
-        chunks_path=chunks_path,
-        w_dense=args.w_dense,
-        w_sparse=args.w_sparse,
-        k_dense=args.k_dense,
-        k_sparse=args.k_sparse,
-        device=args.device,
-        model_name=args.embed_model,
-        quant_backend=args.embed_quant_backend,
-        sparse_title_weight=args.sparse_title_weight,
-        sparse_heading_weight=args.sparse_heading_weight,
-        sparse_body_weight=args.sparse_body_weight,
-        sparse_add_bigrams=args.sparse_add_bigrams,
-        sparse_prf=args.sparse_prf,
-        sparse_prf_k=args.sparse_prf_k,
-        sparse_prf_terms=args.sparse_prf_terms,
-        sparse_prf_alpha=args.sparse_prf_alpha,
-        fusion_method=args.fusion_method,
-        rrf_k=args.rrf_k,
-    )
+    retriever = None
+    if args.retrieval_mode != "closed_book":
+        retriever = build_retriever(
+            mode=args.retrieval_mode,
+            bm25_dir=Path(args.bm25_dir),
+            dense_dir=Path(args.dense_dir),
+            chunks_path=chunks_path,
+            w_dense=args.w_dense,
+            w_sparse=args.w_sparse,
+            k_dense=args.k_dense,
+            k_sparse=args.k_sparse,
+            device=args.device,
+            model_name=args.embed_model,
+            quant_backend=args.embed_quant_backend,
+            sparse_title_weight=args.sparse_title_weight,
+            sparse_heading_weight=args.sparse_heading_weight,
+            sparse_body_weight=args.sparse_body_weight,
+            sparse_add_bigrams=args.sparse_add_bigrams,
+            sparse_prf=args.sparse_prf,
+            sparse_prf_k=args.sparse_prf_k,
+            sparse_prf_terms=args.sparse_prf_terms,
+            sparse_prf_alpha=args.sparse_prf_alpha,
+            fusion_method=args.fusion_method,
+            rrf_k=args.rrf_k,
+        )
 
     reader = QwenReader(ReaderConfig(
         model_name=args.model,
@@ -336,60 +354,62 @@ def main():
         if not qid or not q:
             continue
 
-        retrieved = retriever.retrieve(q, k=args.k_retrieve)
-        conf = _retrieval_confidence(retrieved)
-        stage1_k = args.stage1_k
+        ctx: List[Dict[str, Any]] = []
+        if retriever is not None and args.k_ctx > 0:
+            retrieved = retriever.retrieve(q, k=args.k_retrieve)
+            conf = _retrieval_confidence(retrieved)
+            stage1_k = args.stage1_k
 
-        if args.adaptive_retrieval and conf < args.retrieval_conf_threshold:
-            retrieved = retriever.retrieve(q, k=max(args.low_conf_k_retrieve, args.k_retrieve))
-            stage1_k = max(stage1_k, args.low_conf_stage1_k)
+            if args.adaptive_retrieval and conf < args.retrieval_conf_threshold:
+                retrieved = retriever.retrieve(q, k=max(args.low_conf_k_retrieve, args.k_retrieve))
+                stage1_k = max(stage1_k, args.low_conf_stage1_k)
 
-        selected_ids = mmr_select_chunk_ids(
-            query=q,
-            retrieved=retrieved,
-            chunk_map=chunk_map,
-            retriever=retriever,
-            stage1_k=stage1_k,
-            out_k=max(args.k_ctx, args.rerank_pool_k if args.reader_rerank else args.k_ctx),
-            mmr_lambda=args.mmr_lambda,
-            temporal_boost_weight=args.temporal_boost_weight,
-        )
+            selected_ids = mmr_select_chunk_ids(
+                query=q,
+                retrieved=retrieved,
+                chunk_map=chunk_map,
+                retriever=retriever,
+                stage1_k=stage1_k,
+                out_k=max(args.k_ctx, args.rerank_pool_k if args.reader_rerank else args.k_ctx),
+                mmr_lambda=args.mmr_lambda,
+                temporal_boost_weight=args.temporal_boost_weight,
+            )
 
-        if args.reader_rerank:
-            pool_ids = selected_ids[: max(args.k_ctx, args.rerank_pool_k)]
-            pool_pairs = [(cid, chunk_map[cid]) for cid in pool_ids if cid in chunk_map]
-            pool_chunks = [c for _cid, c in pool_pairs]
-            if pool_chunks:
-                rerank_scores = reader.rerank_chunks(
-                    q,
-                    pool_chunks,
-                    batch_size=args.rerank_batch_size,
-                    max_chunk_chars=args.rerank_max_chunk_chars,
-                )
-                reranked = sorted(
-                    zip([cid for cid, _ in pool_pairs], rerank_scores),
-                    key=lambda x: (x[1], x[0]),
-                    reverse=True,
-                )
-                selected_ids = [cid for cid, _ in reranked]
+            if args.reader_rerank:
+                pool_ids = selected_ids[: max(args.k_ctx, args.rerank_pool_k)]
+                pool_pairs = [(cid, chunk_map[cid]) for cid in pool_ids if cid in chunk_map]
+                pool_chunks = [c for _cid, c in pool_pairs]
+                if pool_chunks:
+                    rerank_scores = reader.rerank_chunks(
+                        q,
+                        pool_chunks,
+                        batch_size=args.rerank_batch_size,
+                        max_chunk_chars=args.rerank_max_chunk_chars,
+                    )
+                    reranked = sorted(
+                        zip([cid for cid, _ in pool_pairs], rerank_scores),
+                        key=lambda x: (x[1], x[0]),
+                        reverse=True,
+                    )
+                    selected_ids = [cid for cid, _ in reranked]
 
-        ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
+            ctx = [chunk_map[cid] for cid in selected_ids if cid in chunk_map]
 
-        if args.dedup_doc:
-            ctx = dedup_by_doc_id(ctx, args.k_ctx)
-        else:
-            ctx = ctx[:args.k_ctx]
+            if args.dedup_doc:
+                ctx = dedup_by_doc_id(ctx, args.k_ctx)
+            else:
+                ctx = ctx[:args.k_ctx]
 
-        if len(ctx) < args.k_ctx:
-            seen = {c.get("chunk_id") for c in ctx if c.get("chunk_id")}
-            for cid, _sc in retrieved:
-                if cid in chunk_map and cid not in seen:
-                    ctx.append(chunk_map[cid])
-                    seen.add(cid)
-                    if args.dedup_doc:
-                        ctx = dedup_by_doc_id(ctx, args.k_ctx)
-                    if len(ctx) >= args.k_ctx:
-                        break
+            if len(ctx) < args.k_ctx:
+                seen = {c.get("chunk_id") for c in ctx if c.get("chunk_id")}
+                for cid, _sc in retrieved:
+                    if cid in chunk_map and cid not in seen:
+                        ctx.append(chunk_map[cid])
+                        seen.add(cid)
+                        if args.dedup_doc:
+                            ctx = dedup_by_doc_id(ctx, args.k_ctx)
+                        if len(ctx) >= args.k_ctx:
+                            break
 
         ans, _used = reader.answer(q, ctx)
         ans = (ans or "").strip()

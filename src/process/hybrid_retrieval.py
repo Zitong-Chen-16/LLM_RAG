@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Literal, Union
 
 from sparse_retrieval import SparseRetriever
 from dense_retrieval import DenseRetriever
@@ -64,6 +64,81 @@ class HybridRetriever:
         return fused[:k]
 
 
+@dataclass
+class DenseOnlyRetriever:
+    dense: DenseRetriever
+    k_dense: int = 100
+
+    def retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
+        # Keep behavior parallel to hybrid depth controls: fetch a configurable
+        # dense pool, then return top-k from that pool.
+        dense_k = max(int(k), int(self.k_dense))
+        return self.dense.retrieve(query, k=dense_k)[:k]
+
+
+@dataclass
+class SparseOnlyRetriever:
+    sparse: SparseRetriever
+    k_sparse: int = 100
+    dense: None = None
+
+    def retrieve(self, query: str, k: int) -> List[Tuple[str, float]]:
+        # Keep behavior parallel to hybrid depth controls: fetch a configurable
+        # sparse pool, then return top-k from that pool.
+        sparse_k = max(int(k), int(self.k_sparse))
+        return self.sparse.retrieve(query, k=sparse_k)[:k]
+
+
+def build_default_dense(
+    *,
+    dense_dir: Path = Path("indexes/dense"),
+    chunks_path: Path = Path("data/processed/chunks.jsonl"),
+    k_dense: int = 100,
+    device: str = "cuda",
+    model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+    quant_backend: str = "none",
+) -> DenseOnlyRetriever:
+    dense = DenseRetriever(
+        index_dir=dense_dir,
+        chunks_path=chunks_path,
+        device=device,
+        model_name=model_name,
+        quant_backend=quant_backend,
+    )
+    dense.load()
+    return DenseOnlyRetriever(dense=dense, k_dense=k_dense)
+
+
+def build_default_sparse(
+    *,
+    bm25_dir: Path = Path("indexes/bm25"),
+    chunks_path: Path = Path("data/processed/chunks.jsonl"),
+    k_sparse: int = 100,
+    sparse_title_weight: int = 3,
+    sparse_heading_weight: int = 2,
+    sparse_body_weight: int = 1,
+    sparse_add_bigrams: bool = True,
+    sparse_prf: bool = True,
+    sparse_prf_k: int = 8,
+    sparse_prf_terms: int = 6,
+    sparse_prf_alpha: float = 0.65,
+) -> SparseOnlyRetriever:
+    sparse = SparseRetriever(
+        index_dir=bm25_dir,
+        chunks_path=chunks_path,
+        title_weight=sparse_title_weight,
+        heading_weight=sparse_heading_weight,
+        body_weight=sparse_body_weight,
+        add_bigrams=sparse_add_bigrams,
+        enable_prf=sparse_prf,
+        prf_k=sparse_prf_k,
+        prf_terms=sparse_prf_terms,
+        prf_alpha=sparse_prf_alpha,
+    )
+    sparse.load()
+    return SparseOnlyRetriever(sparse=sparse, k_sparse=k_sparse)
+
+
 def build_default_hybrid(
     *,
     bm25_dir: Path = Path("indexes/bm25"),
@@ -118,6 +193,83 @@ def build_default_hybrid(
         fusion_method=fusion_method,
         rrf_k=rrf_k,
     )
+
+
+def build_retriever(
+    *,
+    mode: Literal["hybrid", "dense", "sparse"] = "hybrid",
+    bm25_dir: Path = Path("indexes/bm25"),
+    dense_dir: Path = Path("indexes/dense"),
+    chunks_path: Path = Path("data/processed/chunks.jsonl"),
+    w_dense: float = 0.6,
+    w_sparse: float = 0.4,
+    k_dense: int = 100,
+    k_sparse: int = 100,
+    device: str = "cuda",
+    model_name: str = "Alibaba-NLP/gte-Qwen2-1.5B-instruct",
+    quant_backend: str = "none",
+    sparse_title_weight: int = 3,
+    sparse_heading_weight: int = 2,
+    sparse_body_weight: int = 1,
+    sparse_add_bigrams: bool = True,
+    sparse_prf: bool = True,
+    sparse_prf_k: int = 8,
+    sparse_prf_terms: int = 6,
+    sparse_prf_alpha: float = 0.65,
+    fusion_method: str = "rrf",
+    rrf_k: int = 60,
+) -> Union[HybridRetriever, DenseOnlyRetriever, SparseOnlyRetriever]:
+    mode = mode.lower().strip()
+    if mode == "hybrid":
+        return build_default_hybrid(
+            bm25_dir=bm25_dir,
+            dense_dir=dense_dir,
+            chunks_path=chunks_path,
+            w_dense=w_dense,
+            w_sparse=w_sparse,
+            k_dense=k_dense,
+            k_sparse=k_sparse,
+            device=device,
+            model_name=model_name,
+            quant_backend=quant_backend,
+            sparse_title_weight=sparse_title_weight,
+            sparse_heading_weight=sparse_heading_weight,
+            sparse_body_weight=sparse_body_weight,
+            sparse_add_bigrams=sparse_add_bigrams,
+            sparse_prf=sparse_prf,
+            sparse_prf_k=sparse_prf_k,
+            sparse_prf_terms=sparse_prf_terms,
+            sparse_prf_alpha=sparse_prf_alpha,
+            fusion_method=fusion_method,
+            rrf_k=rrf_k,
+        )
+
+    if mode == "dense":
+        return build_default_dense(
+            dense_dir=dense_dir,
+            chunks_path=chunks_path,
+            k_dense=k_dense,
+            device=device,
+            model_name=model_name,
+            quant_backend=quant_backend,
+        )
+
+    if mode == "sparse":
+        return build_default_sparse(
+            bm25_dir=bm25_dir,
+            chunks_path=chunks_path,
+            k_sparse=k_sparse,
+            sparse_title_weight=sparse_title_weight,
+            sparse_heading_weight=sparse_heading_weight,
+            sparse_body_weight=sparse_body_weight,
+            sparse_add_bigrams=sparse_add_bigrams,
+            sparse_prf=sparse_prf,
+            sparse_prf_k=sparse_prf_k,
+            sparse_prf_terms=sparse_prf_terms,
+            sparse_prf_alpha=sparse_prf_alpha,
+        )
+
+    raise ValueError(f"Unsupported retrieval mode: {mode}. Use hybrid|dense|sparse.")
 
 if __name__ == "__main__":
     from query_ppl import mmr_select_chunk_ids, _retrieval_confidence

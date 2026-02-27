@@ -12,7 +12,7 @@ from transformers import (
 )
 import numpy as np
 
-from hybrid_retrieval import build_default_hybrid
+from hybrid_retrieval import build_retriever
 from utils import load_chunk_text_map
 from dense_retrieval import build_embed_text
 
@@ -415,7 +415,9 @@ if __name__ == "__main__":
     chunks_path = Path("data/processed/chunks.jsonl")
     chunk_map = load_chunk_text_map(chunks_path)
 
-    retriever = build_default_hybrid(
+    retrieval_mode = "hybrid"  # hybrid | dense | sparse
+    retriever = build_retriever(
+        mode=retrieval_mode,
         bm25_dir=Path("indexes/bm25_v3"),
         dense_dir=Path("indexes/dense_gte-Qwen2-7B-instruct_v2"),
         chunks_path=chunks_path,

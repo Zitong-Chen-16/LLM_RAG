@@ -2,7 +2,7 @@
 
 uv run src/process/query_ppl.py \
   --model Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4 \
-  --out data/answers/leaderboard_answers_v4.json \
+  --out data/answers/leaderboard_answers_v1_closed_book.json \
   --bm25_dir indexes/bm25_v3 \
   --dense_dir indexes/dense_gte-Qwen2-7B-instruct_v2 \
   --embed_model Alibaba-NLP/gte-Qwen2-7B-instruct \
@@ -11,7 +11,7 @@ uv run src/process/query_ppl.py \
   --temperature 0.0 \
   --top_p 1.0 \
   --max_new_tokens 100 \
-  --k_ctx 20 \
+  --k_ctx 0 \
   --max_context_tokens 24000 \
   --k_retrieve 100 \
   --k_dense 200 \
@@ -25,3 +25,6 @@ uv run src/process/query_ppl.py \
   --mmr_lambda 0.75 \
   --w_dense 0.5 \
   --w_sparse 0.5 \
+  --retrieval_mode closed_book \
+  --no-reader_rerank \
+  --no-adaptive_retrieval
