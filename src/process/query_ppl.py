@@ -174,6 +174,7 @@ def mmr_select_chunk_ids(
     out_k: int,
     mmr_lambda: float,
     temporal_boost_weight: float,
+    use_mmr: bool = True,
 ) -> List[str]:
     cands = [(cid, float(sc)) for cid, sc in retrieved if cid in chunk_map][:stage1_k]
     if not cands:
@@ -210,6 +211,15 @@ def mmr_select_chunk_ids(
 
     # Without dense document embeddings we cannot apply semantic diversity MMR.
     if doc_emb is None:
+        ranked = sorted(
+            range(len(cand_ids)),
+            key=lambda i: (float(rel[i]), cand_ids[i]),
+            reverse=True,
+        )
+        return [cand_ids[i] for i in ranked[:out_k]]
+
+    # Ablation path: keep relevance reranking/temporal boost, disable MMR diversity.
+    if not use_mmr:
         ranked = sorted(
             range(len(cand_ids)),
             key=lambda i: (float(rel[i]), cand_ids[i]),
@@ -262,6 +272,8 @@ def main():
     ap.add_argument("--k_ctx", type=int, default=6, help="How many chunks to pass to reader")
     ap.add_argument("--stage1_k", type=int, default=32, help="Top candidates considered by MMR reranker")
     ap.add_argument("--mmr_lambda", type=float, default=0.75, help="MMR relevance/diversity weight")
+    ap.add_argument("--use_mmr", action=argparse.BooleanOptionalAction, default=True,
+                    help="Enable MMR diversification in candidate selection")
     ap.add_argument("--temporal_boost_weight", type=float, default=0.12, help="Weight for date/event metadata boost")
     ap.add_argument("--reader_rerank", action=argparse.BooleanOptionalAction, default=True,
                     help="Use reader as a final reranker over MMR-selected candidates")
@@ -373,6 +385,7 @@ def main():
                 out_k=max(args.k_ctx, args.rerank_pool_k if args.reader_rerank else args.k_ctx),
                 mmr_lambda=args.mmr_lambda,
                 temporal_boost_weight=args.temporal_boost_weight,
+                use_mmr=args.use_mmr,
             )
 
             if args.reader_rerank:
