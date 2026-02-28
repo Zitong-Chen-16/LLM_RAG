@@ -129,7 +129,14 @@ def _try_plot_overall(
     try:
         import matplotlib.pyplot as plt  # type: ignore
     except Exception:
-        return _fallback_svg_plots(out_dir, overall_rows, hybrid_embed_rows)
+        return _fallback_svg_plots(
+            out_dir=out_dir,
+            overall_rows=overall_rows,
+            by_type_rows=by_type_rows,
+            hybrid_embed_rows=hybrid_embed_rows,
+            type_order=type_order,
+            method_order=method_order,
+        )
 
     fig_dir = out_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
@@ -191,7 +198,53 @@ def _try_plot_overall(
     plt.close()
     generated.append(str(p3))
 
-    # 4) Hybrid embedder comparison (if both rows exist)
+    # 4) Doc diversity heatmap by method x question type
+    pivot_doc: Dict[Tuple[str, str], float] = {}
+    for r in by_type_rows:
+        pivot_doc[(r["method"], r["question_type"])] = _to_float(r["doc_diversity_mean"])
+    data_doc = [[pivot_doc.get((m, t), 0.0) for t in type_order] for m in method_order]
+    vmax_doc = max([max(row) for row in data_doc], default=1.0)
+    if vmax_doc <= 0:
+        vmax_doc = 1.0
+    plt.figure(figsize=(1.8 * max(3, len(type_order)), 0.7 * max(3, len(method_order)) + 2.2))
+    im = plt.imshow(data_doc, aspect="auto", vmin=0.0, vmax=vmax_doc)
+    plt.colorbar(im, label="Doc Diversity Mean")
+    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right")
+    plt.yticks(range(len(method_order)), method_order)
+    plt.title("Doc Diversity Mean by Question Type and Method")
+    for i in range(len(method_order)):
+        for j in range(len(type_order)):
+            plt.text(j, i, f"{data_doc[i][j]:.2f}", ha="center", va="center", fontsize=8)
+    plt.tight_layout()
+    p4 = fig_dir / "doc_diversity_heatmap.png"
+    plt.savefig(p4, dpi=150)
+    plt.close()
+    generated.append(str(p4))
+
+    # 5) Domain diversity heatmap by method x question type
+    pivot_dom: Dict[Tuple[str, str], float] = {}
+    for r in by_type_rows:
+        pivot_dom[(r["method"], r["question_type"])] = _to_float(r["domain_diversity_mean"])
+    data_dom = [[pivot_dom.get((m, t), 0.0) for t in type_order] for m in method_order]
+    vmax_dom = max([max(row) for row in data_dom], default=1.0)
+    if vmax_dom <= 0:
+        vmax_dom = 1.0
+    plt.figure(figsize=(1.8 * max(3, len(type_order)), 0.7 * max(3, len(method_order)) + 2.2))
+    im = plt.imshow(data_dom, aspect="auto", vmin=0.0, vmax=vmax_dom)
+    plt.colorbar(im, label="Domain Diversity Mean")
+    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right")
+    plt.yticks(range(len(method_order)), method_order)
+    plt.title("Domain Diversity Mean by Question Type and Method")
+    for i in range(len(method_order)):
+        for j in range(len(type_order)):
+            plt.text(j, i, f"{data_dom[i][j]:.2f}", ha="center", va="center", fontsize=8)
+    plt.tight_layout()
+    p5 = fig_dir / "domain_diversity_heatmap.png"
+    plt.savefig(p5, dpi=150)
+    plt.close()
+    generated.append(str(p5))
+
+    # 6) Hybrid embedder comparison (if both rows exist)
     if len(hybrid_embed_rows) >= 2:
         labels = [r["method"] for r in hybrid_embed_rows]
         metrics = ["doc_diversity_mean", "domain_diversity_mean", "evidence_proxy_rate"]
@@ -206,10 +259,10 @@ def _try_plot_overall(
         plt.title("Hybrid Embedder Ablation (GTE-Qwen vs MiniLM)")
         plt.legend()
         plt.tight_layout()
-        p4 = fig_dir / "hybrid_embedder_ablation.png"
-        plt.savefig(p4, dpi=150)
+        p6 = fig_dir / "hybrid_embedder_ablation.png"
+        plt.savefig(p6, dpi=150)
         plt.close()
-        generated.append(str(p4))
+        generated.append(str(p6))
 
     return generated
 
@@ -305,7 +358,10 @@ def _fallback_svg_bar(
 def _fallback_svg_plots(
     out_dir: Path,
     overall_rows: List[Dict[str, Any]],
+    by_type_rows: List[Dict[str, Any]],
     hybrid_embed_rows: List[Dict[str, Any]],
+    type_order: List[str],
+    method_order: List[str],
 ) -> List[str]:
     fig_dir = out_dir / "figures"
     fig_dir.mkdir(parents=True, exist_ok=True)
@@ -331,6 +387,38 @@ def _fallback_svg_plots(
             "Retrieval Diversity by Method",
             methods,
             [("Doc Diversity", doc_div), ("Domain Diversity", dom_div)],
+        )
+    )
+
+    # Heatmaps (evidence/doc/domain) as SVG fallback.
+    generated.append(
+        _fallback_svg_heatmap(
+            path=fig_dir / "evidence_proxy_heatmap.svg",
+            title="Evidence Proxy Rate by Question Type and Method",
+            row_labels=method_order,
+            col_labels=type_order,
+            data=_matrix_from_rows(by_type_rows, "evidence_proxy_rate", method_order, type_order),
+            value_fmt="{:.2f}",
+        )
+    )
+    generated.append(
+        _fallback_svg_heatmap(
+            path=fig_dir / "doc_diversity_heatmap.svg",
+            title="Doc Diversity Mean by Question Type and Method",
+            row_labels=method_order,
+            col_labels=type_order,
+            data=_matrix_from_rows(by_type_rows, "doc_diversity_mean", method_order, type_order),
+            value_fmt="{:.2f}",
+        )
+    )
+    generated.append(
+        _fallback_svg_heatmap(
+            path=fig_dir / "domain_diversity_heatmap.svg",
+            title="Domain Diversity Mean by Question Type and Method",
+            row_labels=method_order,
+            col_labels=type_order,
+            data=_matrix_from_rows(by_type_rows, "domain_diversity_mean", method_order, type_order),
+            value_fmt="{:.2f}",
         )
     )
 
@@ -373,6 +461,96 @@ def _fallback_svg_plots(
         )
 
     return generated
+
+
+def _matrix_from_rows(
+    rows: List[Dict[str, Any]],
+    metric: str,
+    method_order: List[str],
+    type_order: List[str],
+) -> List[List[float]]:
+    pivot: Dict[Tuple[str, str], float] = {}
+    for r in rows:
+        pivot[(str(r.get("method", "")), str(r.get("question_type", "")))] = _to_float(r.get(metric))
+    return [[pivot.get((m, t), 0.0) for t in type_order] for m in method_order]
+
+
+def _hex_blues(x: float) -> str:
+    # Map 0..1 to a light->dark blue ramp.
+    v = max(0.0, min(1.0, x))
+    r = int(240 - 130 * v)
+    g = int(247 - 170 * v)
+    b = int(255 - 120 * v)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _fallback_svg_heatmap(
+    *,
+    path: Path,
+    title: str,
+    row_labels: List[str],
+    col_labels: List[str],
+    data: List[List[float]],
+    value_fmt: str = "{:.2f}",
+) -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    n_rows = len(row_labels)
+    n_cols = len(col_labels)
+    if n_rows == 0 or n_cols == 0:
+        path.write_text("<svg xmlns='http://www.w3.org/2000/svg' width='640' height='120'></svg>", encoding="utf-8")
+        return str(path)
+
+    cell_w = 120
+    cell_h = 34
+    margin_left = 230
+    margin_top = 90
+    margin_right = 30
+    margin_bottom = 40
+    plot_w = n_cols * cell_w
+    plot_h = n_rows * cell_h
+    width = margin_left + plot_w + margin_right
+    height = margin_top + plot_h + margin_bottom
+
+    vmax = max([max(row) for row in data], default=1.0)
+    if vmax <= 0:
+        vmax = 1.0
+
+    lines: List[str] = []
+    lines.append(f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}'>")
+    lines.append("<style>text{font-family:Arial,Helvetica,sans-serif;font-size:12px;}</style>")
+    lines.append(
+        f"<text x='{width/2:.1f}' y='28' text-anchor='middle' font-size='16' font-weight='bold'>{escape(title)}</text>"
+    )
+
+    # Column labels
+    for j, c in enumerate(col_labels):
+        x = margin_left + j * cell_w + cell_w / 2
+        y = margin_top - 12
+        lines.append(
+            f"<text x='{x:.1f}' y='{y:.1f}' text-anchor='middle' transform='rotate(20 {x:.1f},{y:.1f})'>{escape(c)}</text>"
+        )
+
+    # Row labels + cells
+    for i, rlab in enumerate(row_labels):
+        y = margin_top + i * cell_h + cell_h / 2 + 4
+        lines.append(f"<text x='{margin_left-10}' y='{y:.1f}' text-anchor='end'>{escape(rlab)}</text>")
+        for j in range(n_cols):
+            v = data[i][j] if i < len(data) and j < len(data[i]) else 0.0
+            frac = v / vmax if vmax > 0 else 0.0
+            color = _hex_blues(frac)
+            x0 = margin_left + j * cell_w
+            y0 = margin_top + i * cell_h
+            lines.append(
+                f"<rect x='{x0:.1f}' y='{y0:.1f}' width='{cell_w:.1f}' height='{cell_h:.1f}' fill='{color}' stroke='#ffffff'/>"
+            )
+            lines.append(
+                f"<text x='{x0 + cell_w/2:.1f}' y='{y0 + cell_h/2 + 4:.1f}' text-anchor='middle'>{value_fmt.format(v)}</text>"
+            )
+
+    lines.append("</svg>")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return str(path)
 
 
 def main() -> None:
