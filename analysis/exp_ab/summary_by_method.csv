@@ -1,0 +1,5 @@
+method,n_queries,doc_diversity_mean,domain_diversity_mean,evidence_proxy_rate
+sparse,157,6.9682,3.0637,0.8025
+dense,157,8.4395,3.8025,0.8599
+hybrid_rrf,157,7.5096,3.6497,0.828
+hybrid_minmax,157,7.5478,3.5924,0.8408

@@ -23,6 +23,6 @@ uv run src/process/query_ppl.py \
   --dedup_doc \
   --stage1_k 60 \
   --mmr_lambda 0.75 \
-  --w_dense 1.0 \
-  --w_sparse 0.0 \
-  --retrieval_mode dense
+  --w_dense 0.5 \
+  --w_sparse 0.5 \
+  --retrieval_mode hybrid

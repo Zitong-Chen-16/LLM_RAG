@@ -1,0 +1,30 @@
+[
+  {
+    "method": "sparse",
+    "n_queries": 157,
+    "doc_diversity_mean": 6.9682,
+    "domain_diversity_mean": 3.0637,
+    "evidence_proxy_rate": 0.8025
+  },
+  {
+    "method": "dense",
+    "n_queries": 157,
+    "doc_diversity_mean": 8.4395,
+    "domain_diversity_mean": 3.8025,
+    "evidence_proxy_rate": 0.8599
+  },
+  {
+    "method": "hybrid_rrf",
+    "n_queries": 157,
+    "doc_diversity_mean": 7.5096,
+    "domain_diversity_mean": 3.6497,
+    "evidence_proxy_rate": 0.828
+  },
+  {
+    "method": "hybrid_minmax",
+    "n_queries": 157,
+    "doc_diversity_mean": 7.5478,
+    "domain_diversity_mean": 3.5924,
+    "evidence_proxy_rate": 0.8408
+  }
+]

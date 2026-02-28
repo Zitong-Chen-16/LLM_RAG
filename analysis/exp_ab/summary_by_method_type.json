@@ -1,0 +1,162 @@
+[
+  {
+    "method": "dense",
+    "question_type": "description",
+    "n_queries": 13,
+    "doc_diversity_mean": 8.0,
+    "domain_diversity_mean": 4.3846,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "dense",
+    "question_type": "entity_location",
+    "n_queries": 124,
+    "doc_diversity_mean": 8.6532,
+    "domain_diversity_mean": 3.7581,
+    "evidence_proxy_rate": 0.8226
+  },
+  {
+    "method": "dense",
+    "question_type": "event_date",
+    "n_queries": 15,
+    "doc_diversity_mean": 7.5333,
+    "domain_diversity_mean": 3.9333,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "dense",
+    "question_type": "list",
+    "n_queries": 2,
+    "doc_diversity_mean": 6.0,
+    "domain_diversity_mean": 3.0,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "dense",
+    "question_type": "numeric",
+    "n_queries": 3,
+    "doc_diversity_mean": 7.6667,
+    "domain_diversity_mean": 3.0,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_minmax",
+    "question_type": "description",
+    "n_queries": 13,
+    "doc_diversity_mean": 7.6154,
+    "domain_diversity_mean": 4.3077,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_minmax",
+    "question_type": "entity_location",
+    "n_queries": 124,
+    "doc_diversity_mean": 7.7097,
+    "domain_diversity_mean": 3.5645,
+    "evidence_proxy_rate": 0.7984
+  },
+  {
+    "method": "hybrid_minmax",
+    "question_type": "event_date",
+    "n_queries": 15,
+    "doc_diversity_mean": 6.8,
+    "domain_diversity_mean": 3.3333,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_minmax",
+    "question_type": "list",
+    "n_queries": 2,
+    "doc_diversity_mean": 5.0,
+    "domain_diversity_mean": 3.0,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_minmax",
+    "question_type": "numeric",
+    "n_queries": 3,
+    "doc_diversity_mean": 6.0,
+    "domain_diversity_mean": 3.3333,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "description",
+    "n_queries": 13,
+    "doc_diversity_mean": 7.6154,
+    "domain_diversity_mean": 4.3077,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "entity_location",
+    "n_queries": 124,
+    "doc_diversity_mean": 7.6613,
+    "domain_diversity_mean": 3.6452,
+    "evidence_proxy_rate": 0.7823
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "event_date",
+    "n_queries": 15,
+    "doc_diversity_mean": 6.6667,
+    "domain_diversity_mean": 3.4,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "list",
+    "n_queries": 2,
+    "doc_diversity_mean": 5.5,
+    "domain_diversity_mean": 2.0,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "numeric",
+    "n_queries": 3,
+    "doc_diversity_mean": 6.3333,
+    "domain_diversity_mean": 3.3333,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "sparse",
+    "question_type": "description",
+    "n_queries": 13,
+    "doc_diversity_mean": 6.9231,
+    "domain_diversity_mean": 2.9231,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "sparse",
+    "question_type": "entity_location",
+    "n_queries": 124,
+    "doc_diversity_mean": 7.1048,
+    "domain_diversity_mean": 3.1532,
+    "evidence_proxy_rate": 0.75
+  },
+  {
+    "method": "sparse",
+    "question_type": "event_date",
+    "n_queries": 15,
+    "doc_diversity_mean": 6.4667,
+    "domain_diversity_mean": 2.8,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "sparse",
+    "question_type": "list",
+    "n_queries": 2,
+    "doc_diversity_mean": 5.0,
+    "domain_diversity_mean": 2.0,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "sparse",
+    "question_type": "numeric",
+    "n_queries": 3,
+    "doc_diversity_mean": 5.3333,
+    "domain_diversity_mean": 2.0,
+    "evidence_proxy_rate": 1.0
+  }
+]
