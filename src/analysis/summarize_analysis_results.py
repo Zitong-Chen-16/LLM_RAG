@@ -183,15 +183,18 @@ def _try_plot_overall(
         [pivot.get((m, t), 0.0) for t in type_order]
         for m in method_order
     ]
-    plt.figure(figsize=(1.8 * max(3, len(type_order)), 0.7 * max(3, len(method_order)) + 2.2))
+    heatmap_size = (2.4 * max(3, len(type_order)), 1.0 * max(3, len(method_order)) + 3.2)
+    plt.figure(figsize=heatmap_size)
     im = plt.imshow(data, aspect="auto", vmin=0.0, vmax=1.0)
-    plt.colorbar(im, label="Evidence Proxy Rate")
-    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right")
-    plt.yticks(range(len(method_order)), method_order)
-    plt.title("Evidence Proxy Rate by Question Type and Method")
+    cbar = plt.colorbar(im)
+    cbar.set_label("Evidence Proxy Rate", fontsize=12)
+    cbar.ax.tick_params(labelsize=11)
+    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right", fontsize=12)
+    plt.yticks(range(len(method_order)), method_order, fontsize=12)
+    plt.title("Evidence Proxy Rate by Question Type and Method", fontsize=16, pad=14)
     for i in range(len(method_order)):
         for j in range(len(type_order)):
-            plt.text(j, i, f"{data[i][j]:.2f}", ha="center", va="center", fontsize=8)
+            plt.text(j, i, f"{data[i][j]:.2f}", ha="center", va="center", fontsize=11, fontweight="semibold")
     plt.tight_layout()
     p3 = fig_dir / "evidence_proxy_heatmap.png"
     plt.savefig(p3, dpi=150)
@@ -206,15 +209,17 @@ def _try_plot_overall(
     vmax_doc = max([max(row) for row in data_doc], default=1.0)
     if vmax_doc <= 0:
         vmax_doc = 1.0
-    plt.figure(figsize=(1.8 * max(3, len(type_order)), 0.7 * max(3, len(method_order)) + 2.2))
+    plt.figure(figsize=heatmap_size)
     im = plt.imshow(data_doc, aspect="auto", vmin=0.0, vmax=vmax_doc)
-    plt.colorbar(im, label="Doc Diversity Mean")
-    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right")
-    plt.yticks(range(len(method_order)), method_order)
-    plt.title("Doc Diversity Mean by Question Type and Method")
+    cbar = plt.colorbar(im)
+    cbar.set_label("Doc Diversity Mean", fontsize=12)
+    cbar.ax.tick_params(labelsize=11)
+    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right", fontsize=12)
+    plt.yticks(range(len(method_order)), method_order, fontsize=12)
+    plt.title("Doc Diversity Mean by Question Type and Method", fontsize=16, pad=14)
     for i in range(len(method_order)):
         for j in range(len(type_order)):
-            plt.text(j, i, f"{data_doc[i][j]:.2f}", ha="center", va="center", fontsize=8)
+            plt.text(j, i, f"{data_doc[i][j]:.2f}", ha="center", va="center", fontsize=11, fontweight="semibold")
     plt.tight_layout()
     p4 = fig_dir / "doc_diversity_heatmap.png"
     plt.savefig(p4, dpi=150)
@@ -229,15 +234,17 @@ def _try_plot_overall(
     vmax_dom = max([max(row) for row in data_dom], default=1.0)
     if vmax_dom <= 0:
         vmax_dom = 1.0
-    plt.figure(figsize=(1.8 * max(3, len(type_order)), 0.7 * max(3, len(method_order)) + 2.2))
+    plt.figure(figsize=heatmap_size)
     im = plt.imshow(data_dom, aspect="auto", vmin=0.0, vmax=vmax_dom)
-    plt.colorbar(im, label="Domain Diversity Mean")
-    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right")
-    plt.yticks(range(len(method_order)), method_order)
-    plt.title("Domain Diversity Mean by Question Type and Method")
+    cbar = plt.colorbar(im)
+    cbar.set_label("Domain Diversity Mean", fontsize=12)
+    cbar.ax.tick_params(labelsize=11)
+    plt.xticks(range(len(type_order)), type_order, rotation=20, ha="right", fontsize=12)
+    plt.yticks(range(len(method_order)), method_order, fontsize=12)
+    plt.title("Domain Diversity Mean by Question Type and Method", fontsize=16, pad=14)
     for i in range(len(method_order)):
         for j in range(len(type_order)):
-            plt.text(j, i, f"{data_dom[i][j]:.2f}", ha="center", va="center", fontsize=8)
+            plt.text(j, i, f"{data_dom[i][j]:.2f}", ha="center", va="center", fontsize=11, fontweight="semibold")
     plt.tight_layout()
     p5 = fig_dir / "domain_diversity_heatmap.png"
     plt.savefig(p5, dpi=150)
@@ -501,12 +508,12 @@ def _fallback_svg_heatmap(
         path.write_text("<svg xmlns='http://www.w3.org/2000/svg' width='640' height='120'></svg>", encoding="utf-8")
         return str(path)
 
-    cell_w = 120
-    cell_h = 34
-    margin_left = 230
-    margin_top = 90
+    cell_w = 165
+    cell_h = 52
+    margin_left = 360
+    margin_top = 150
     margin_right = 30
-    margin_bottom = 40
+    margin_bottom = 60
     plot_w = n_cols * cell_w
     plot_h = n_rows * cell_h
     width = margin_left + plot_w + margin_right
@@ -518,23 +525,30 @@ def _fallback_svg_heatmap(
 
     lines: List[str] = []
     lines.append(f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}'>")
-    lines.append("<style>text{font-family:Arial,Helvetica,sans-serif;font-size:12px;}</style>")
     lines.append(
-        f"<text x='{width/2:.1f}' y='28' text-anchor='middle' font-size='16' font-weight='bold'>{escape(title)}</text>"
+        "<style>"
+        "text{font-family:Arial,Helvetica,sans-serif;font-size:16px;}"
+        ".title{font-size:26px;font-weight:bold;}"
+        ".axis{font-size:18px;}"
+        ".cell{font-size:17px;font-weight:600;}"
+        "</style>"
+    )
+    lines.append(
+        f"<text class='title' x='{width/2:.1f}' y='42' text-anchor='middle'>{escape(title)}</text>"
     )
 
     # Column labels
     for j, c in enumerate(col_labels):
         x = margin_left + j * cell_w + cell_w / 2
-        y = margin_top - 12
+        y = margin_top - 24
         lines.append(
-            f"<text x='{x:.1f}' y='{y:.1f}' text-anchor='middle' transform='rotate(20 {x:.1f},{y:.1f})'>{escape(c)}</text>"
+            f"<text class='axis' x='{x:.1f}' y='{y:.1f}' text-anchor='middle' transform='rotate(20 {x:.1f},{y:.1f})'>{escape(c)}</text>"
         )
 
     # Row labels + cells
     for i, rlab in enumerate(row_labels):
         y = margin_top + i * cell_h + cell_h / 2 + 4
-        lines.append(f"<text x='{margin_left-10}' y='{y:.1f}' text-anchor='end'>{escape(rlab)}</text>")
+        lines.append(f"<text class='axis' x='{margin_left-12}' y='{y:.1f}' text-anchor='end'>{escape(rlab)}</text>")
         for j in range(n_cols):
             v = data[i][j] if i < len(data) and j < len(data[i]) else 0.0
             frac = v / vmax if vmax > 0 else 0.0
@@ -545,7 +559,7 @@ def _fallback_svg_heatmap(
                 f"<rect x='{x0:.1f}' y='{y0:.1f}' width='{cell_w:.1f}' height='{cell_h:.1f}' fill='{color}' stroke='#ffffff'/>"
             )
             lines.append(
-                f"<text x='{x0 + cell_w/2:.1f}' y='{y0 + cell_h/2 + 4:.1f}' text-anchor='middle'>{value_fmt.format(v)}</text>"
+                f"<text class='cell' x='{x0 + cell_w/2:.1f}' y='{y0 + cell_h/2 + 6:.1f}' text-anchor='middle'>{value_fmt.format(v)}</text>"
             )
 
     lines.append("</svg>")
