@@ -1,0 +1,42 @@
+[
+  {
+    "method": "hybrid_rrf",
+    "question_type": "description",
+    "n_queries": 13,
+    "doc_diversity_mean": 6.9231,
+    "domain_diversity_mean": 3.3846,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "entity_location",
+    "n_queries": 124,
+    "doc_diversity_mean": 6.8468,
+    "domain_diversity_mean": 3.121,
+    "evidence_proxy_rate": 0.75
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "event_date",
+    "n_queries": 15,
+    "doc_diversity_mean": 6.2667,
+    "domain_diversity_mean": 2.6667,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "list",
+    "n_queries": 2,
+    "doc_diversity_mean": 3.0,
+    "domain_diversity_mean": 1.5,
+    "evidence_proxy_rate": 1.0
+  },
+  {
+    "method": "hybrid_rrf",
+    "question_type": "numeric",
+    "n_queries": 3,
+    "doc_diversity_mean": 4.3333,
+    "domain_diversity_mean": 2.3333,
+    "evidence_proxy_rate": 1.0
+  }
+]

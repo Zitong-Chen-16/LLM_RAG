@@ -1,0 +1,9 @@
+[
+  {
+    "method": "hybrid_rrf",
+    "n_queries": 157,
+    "doc_diversity_mean": 6.7006,
+    "domain_diversity_mean": 3.0637,
+    "evidence_proxy_rate": 0.8025
+  }
+]

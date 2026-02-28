@@ -1,0 +1,18 @@
+{
+  "hybrid_wins_dense": [
+    "102",
+    "121"
+  ],
+  "hybrid_wins_sparse": [
+    "100",
+    "103"
+  ],
+  "hybrid_qwen_vs_hybrid_minilm": [
+    "8",
+    "127"
+  ],
+  "hybrid_failure_cases": [
+    "104",
+    "105"
+  ]
+}

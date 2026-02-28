@@ -1,0 +1,6 @@
+method,question_type,n_queries,doc_diversity_mean,domain_diversity_mean,evidence_proxy_rate
+hybrid_rrf,description,13,6.9231,3.3846,1.0
+hybrid_rrf,entity_location,124,6.8468,3.121,0.75
+hybrid_rrf,event_date,15,6.2667,2.6667,1.0
+hybrid_rrf,list,2,3.0,1.5,1.0
+hybrid_rrf,numeric,3,4.3333,2.3333,1.0
