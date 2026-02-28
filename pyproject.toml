@@ -11,6 +11,7 @@ dependencies = [
     "bm25s>=0.3.0",
     "faiss-gpu-cu12>=1.13.2",
     "gptqmodel>=5.7.0",
+    "matplotlib>=3.10.8",
     "optimum>=2.1.0",
     "pdfplumber>=0.11.9",
     "pyyaml>=6.0.3",
