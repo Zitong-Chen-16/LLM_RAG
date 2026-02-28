@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import sys
 from pathlib import Path
@@ -16,7 +15,6 @@ from common import (  # noqa: E402
     classify_question_type,
     load_answers,
     load_queries,
-    normalize_label,
     write_json,
 )
 
@@ -35,22 +33,6 @@ def _read_jsonl(path: Path) -> List[Dict[str, Any]]:
 def _is_idk(ans: str) -> bool:
     s = (ans or "").strip().lower()
     return s in {"", "i don't know", "i dont know", "unknown", "not sure"}
-
-
-def _load_label_map(path: Optional[Path]) -> Dict[str, Dict[str, str]]:
-    if path is None or not path.exists():
-        return {}
-    rows = list(csv.DictReader(path.open("r", encoding="utf-8")))
-    out: Dict[str, Dict[str, str]] = {}
-    for r in rows:
-        qid = str(r.get("qid", "")).strip()
-        if not qid:
-            continue
-        out[qid] = {
-            "closed": normalize_label(str(r.get("closed_label", "") or "")),
-            "rag": normalize_label(str(r.get("rag_label", "") or "")),
-        }
-    return out
 
 
 def _top_titles_snips(detail: Optional[Dict[str, Any]]) -> List[tuple[str, str]]:
@@ -74,7 +56,8 @@ def main() -> None:
     ap.add_argument("--sparse_answers", required=True)
     ap.add_argument("--hybrid_answers", required=True)
     ap.add_argument("--hybrid_minmax_answers", default="", help="Optional")
-    ap.add_argument("--faithfulness_csv", default="", help="Optional annotated sheet from Experiment C")
+    ap.add_argument("--hybrid_minilm_answers", default="", help="Optional (exp8) hybrid with MiniLM embedder")
+    ap.add_argument("--details_jsonl_hybrid_minilm", default="", help="Optional retrieval details JSONL for exp8")
     ap.add_argument("--out_md", default="analysis/exp_d/representative_examples.md")
     ap.add_argument("--out_json", default="analysis/exp_d/selected_examples.json")
     ap.add_argument("--n_per_bucket", type=int, default=2)
@@ -89,7 +72,7 @@ def main() -> None:
     sparse = load_answers(Path(args.sparse_answers))
     hybrid = load_answers(Path(args.hybrid_answers))
     minmax = load_answers(Path(args.hybrid_minmax_answers)) if args.hybrid_minmax_answers else {}
-    labels = _load_label_map(Path(args.faithfulness_csv)) if args.faithfulness_csv else {}
+    hybrid_minilm = load_answers(Path(args.hybrid_minilm_answers)) if args.hybrid_minilm_answers else {}
 
     details_rows = _read_jsonl(Path(args.details_jsonl))
     detail_by_method_qid: Dict[str, Dict[str, Dict[str, Any]]] = {}
@@ -103,10 +86,29 @@ def main() -> None:
     def d(method: str, qid: str) -> Optional[Dict[str, Any]]:
         return detail_by_method_qid.get(method, {}).get(qid)
 
+    # Optional retrieval details from exp8 run. We expect method "hybrid_rrf" there.
+    detail_hybrid_minilm_qid: Dict[str, Dict[str, Any]] = {}
+    if args.details_jsonl_hybrid_minilm:
+        p = Path(args.details_jsonl_hybrid_minilm)
+        if p.exists():
+            for r in _read_jsonl(p):
+                m = str(r.get("method", "")).strip()
+                qid = str(r.get("qid", "")).strip()
+                if m == "hybrid_rrf" and qid:
+                    detail_hybrid_minilm_qid[qid] = r
+        else:
+            print(
+                f"[exp_d] warning: exp8 retrieval details file not found at {p}; "
+                "MiniLM retrieval snippets will be omitted."
+            )
+
+    def d_hybrid_minilm(qid: str) -> Optional[Dict[str, Any]]:
+        return detail_hybrid_minilm_qid.get(qid)
+
     # Candidate buckets.
     cand_hybrid_over_dense: List[str] = []
     cand_hybrid_over_sparse: List[str] = []
-    cand_closed_hallu_rag_supported: List[str] = []
+    cand_hybrid_vs_minilm: List[str] = []
     cand_hybrid_fail: List[str] = []
 
     for qid in q_by_id:
@@ -125,18 +127,12 @@ def main() -> None:
         if hyr_hit == 1 and sparse_hit == 0:
             cand_hybrid_over_sparse.append(qid)
 
-        # Prefer strict manual labels when available.
-        if qid in labels and labels[qid]["closed"] and labels[qid]["rag"]:
-            if labels[qid]["closed"] == "unsupported" and labels[qid]["rag"] == "supported":
-                cand_closed_hallu_rag_supported.append(qid)
-        else:
-            if (
-                hyr_hit == 1
-                and not _is_idk(closed.get(qid, ""))
-                and not _is_idk(hybrid.get(qid, ""))
-                and closed.get(qid, "").strip() != hybrid.get(qid, "").strip()
-            ):
-                cand_closed_hallu_rag_supported.append(qid)
+        # Embedding ablation bucket: same hybrid pipeline, different dense embedder.
+        if hybrid_minilm:
+            h_qwen = hybrid.get(qid, "").strip()
+            h_minilm = hybrid_minilm.get(qid, "").strip()
+            if h_qwen and h_minilm and h_qwen != h_minilm:
+                cand_hybrid_vs_minilm.append(qid)
 
         if hyr_hit == 0 or _is_idk(hybrid.get(qid, "")):
             cand_hybrid_fail.append(qid)
@@ -144,13 +140,25 @@ def main() -> None:
     # Deterministic selection.
     cand_hybrid_over_dense = sorted(set(cand_hybrid_over_dense))
     cand_hybrid_over_sparse = sorted(set(cand_hybrid_over_sparse))
-    cand_closed_hallu_rag_supported = sorted(set(cand_closed_hallu_rag_supported))
+    cand_hybrid_vs_minilm = sorted(set(cand_hybrid_vs_minilm))
     cand_hybrid_fail = sorted(set(cand_hybrid_fail))
+
+    # Prioritize "stronger" minilm-ablation examples:
+    # cases where one system says IDK and the other provides an answer.
+    if cand_hybrid_vs_minilm:
+        cand_hybrid_vs_minilm.sort(
+            key=lambda qid: (
+                int(_is_idk(hybrid.get(qid, "")) != _is_idk(hybrid_minilm.get(qid, ""))),
+                qtype_by_id.get(qid, ""),
+                qid,
+            ),
+            reverse=True,
+        )
 
     selected = {
         "hybrid_wins_dense": cand_hybrid_over_dense[: args.n_per_bucket],
         "hybrid_wins_sparse": cand_hybrid_over_sparse[: args.n_per_bucket],
-        "closed_hallucinates_rag_supported": cand_closed_hallu_rag_supported[: args.n_per_bucket],
+        "hybrid_qwen_vs_hybrid_minilm": cand_hybrid_vs_minilm[: args.n_per_bucket],
         "hybrid_failure_cases": cand_hybrid_fail[: args.n_per_bucket],
     }
     write_json(Path(args.out_json), selected)
@@ -162,21 +170,21 @@ def main() -> None:
     lines.append("# Representative Examples (Experiment D)")
     lines.append("")
     lines.append(
-        "Selection buckets: 2 hybrid>dense, 2 hybrid>sparse, 2 closed-hallucination vs RAG-supported, 2 failures."
+        "Selection buckets: 2 hybrid>dense, 2 hybrid>sparse, 2 hybrid(GTE-Qwen) vs hybrid(MiniLM), 2 failures."
     )
     lines.append("")
 
     bucket_titles = {
         "hybrid_wins_dense": "A) Hybrid (RRF) beats Dense-only",
         "hybrid_wins_sparse": "B) Hybrid (RRF) beats Sparse-only",
-        "closed_hallucinates_rag_supported": "C) Closed-book hallucination vs RAG-supported",
+        "hybrid_qwen_vs_hybrid_minilm": "C) Embedding Ablation: Hybrid GTE-Qwen vs Hybrid MiniLM",
         "hybrid_failure_cases": "D) Hybrid failure cases",
     }
 
     for key in [
         "hybrid_wins_dense",
         "hybrid_wins_sparse",
-        "closed_hallucinates_rag_supported",
+        "hybrid_qwen_vs_hybrid_minilm",
         "hybrid_failure_cases",
     ]:
         lines.append(f"## {bucket_titles[key]}")
@@ -197,12 +205,10 @@ def main() -> None:
             lines.append(f"- Dense-only: {dense.get(qid, '')}")
             lines.append(f"- Sparse-only: {sparse.get(qid, '')}")
             lines.append(f"- Hybrid RRF: {hybrid.get(qid, '')}")
+            if hybrid_minilm:
+                lines.append(f"- Hybrid MiniLM (exp8): {hybrid_minilm.get(qid, '')}")
             if minmax:
                 lines.append(f"- Hybrid MinMax: {minmax.get(qid, '')}")
-            if qid in labels:
-                lines.append(
-                    f"- Manual labels: closed={labels[qid].get('closed','')}, rag={labels[qid].get('rag','')}"
-                )
             lines.append("")
 
             for method, label in [
@@ -214,6 +220,16 @@ def main() -> None:
                 lines.append(f"**{label}:**")
                 if not pairs:
                     lines.append("- _No retrieval detail found_")
+                else:
+                    for i, (title, snip) in enumerate(pairs, start=1):
+                        lines.append(f"- {i}. {title} | {snip}")
+                lines.append("")
+
+            if hybrid_minilm:
+                pairs = _top_titles_snips(d_hybrid_minilm(qid))
+                lines.append("**Hybrid MiniLM (exp8) top retrieval:**")
+                if not pairs:
+                    lines.append("- _No exp8 retrieval detail found (pass --details_jsonl_hybrid_minilm to include)_")
                 else:
                     for i, (title, snip) in enumerate(pairs, start=1):
                         lines.append(f"- {i}. {title} | {snip}")

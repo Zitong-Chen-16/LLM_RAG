@@ -2,7 +2,7 @@
 
 uv run src/process/query_ppl.py \
   --model Qwen/Qwen2.5-32B-Instruct-GPTQ-Int4 \
-  --out data/answers/leaderboard_answers_v7_dense_only_minilm.json \
+  --out data/answers/leaderboard_answers_v8_hybrid_minilm.json \
   --bm25_dir indexes/bm25_v3 \
   --dense_dir indexes/dense_all-MiniLM-L6-v2_v2 \
   --embed_model sentence-transformers/all-MiniLM-L6-v2 \
