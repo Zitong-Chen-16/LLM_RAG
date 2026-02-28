@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
-TEST_FILE="${1:-/Users/samchen/Downloads/test_set_day_2(1).txt}"
-OUT_FILE="${2:-data/answers/test_set_day_2_answers.json}"
+TEST_FILE="${1:-data/test_set_day_2.txt}"
+OUT_FILE="${2:-data/answers/system_output_1.json}"
 if [[ $# -gt 2 ]]; then
   EXTRA_ARGS=("${@:3}")
 else
